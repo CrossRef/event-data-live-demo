@@ -1,0 +1,79 @@
+<html>
+  <head>
+      <title>Event Data Live Stream Demo</title>
+  </head>
+  <body>
+    <script>
+      window.eventLimit = 100;
+
+      window.start = function(catchupCommand) {
+        var numEvents = 0;
+
+        var list = document.getElementById("events");
+        var message = document.getElementById("message");
+
+        // Clean up in case we were doing something else before.
+        if (window.websocket !== undefined) {
+          window.websocket.close();
+        }
+
+        while (list.firstChild) {
+          list.removeChild(list.firstChild);
+        }
+
+        message.textContent = "";
+
+        // Connect.
+        var url = "ws://" + window.location.host + "/socket";
+        var source = document.getElementById("source").value;
+
+        if (source != "all") {
+          url += "?source_id=" + source;
+        }
+
+        window.websocket = new WebSocket(url);
+        window.websocket.onmessage = function(event) {
+          numEvents++;
+
+          var data = event.data;
+
+          var node = document.createElement("li");
+          node.appendChild(document.createTextNode(event.data));
+          
+          list.insertBefore(node, list.firstChild);
+
+          if (numEvents > eventLimit) {
+            list.removeChild(list.lastChild);
+          }
+
+          message.textContent = "" + numEvents + " events this session";
+        }
+
+        window.websocket.onopen = function() {
+          if (catchupCommand) {
+            websocket.send(catchupCommand);
+          }
+
+          websocket.send("start");
+
+          window.websocket.onopen = null;
+        }
+      }
+    </script>
+    <h1>Event Live Stream Demo</h1>
+    <select id="source">
+      <option value="all">all</option>
+      <option value="twitter">twitter</option>
+      <option value="wikipedia">wikipedia</option>
+      <option value="newsfeed">newsfeed</option>
+      <option value="wordpress">wordpress.com</option>
+      <option value="reddit">reddit</option>
+    </select>
+    <button onclick="start(null)">Start</button>
+    <button onclick="start('items 10')">Start and catch-up 10 items</button>
+    <button onclick="start('since 0')">Start and catch-up all available</button>
+    <div id="message"></div>
+    <ul id="events">
+    </ul>
+  </body>
+</html>

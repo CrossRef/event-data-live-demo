@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="">
+    <meta name="author" content="">
+
+    <title>Crossref Event Data</title>
+
+    <link rel="stylesheet" href="/lib/bootstrap/dist/css/bootstrap.css" />
+
+    <link rel="stylesheet" href="/lib/bootstrap/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/lib/bootstrap/dist/css/bootstrap-theme.min.css">
+    <link rel="stylesheet" href="/lib/fontawesome/css/font-awesome.min.css">
+    <link rel="stylesheet" href="/lib/bootstrap-additions/dist/bootstrap-additions.min.css">
+
+    <link rel="stylesheet" href="/navbar-fixed-top.css">
+    <link type="text/css" rel="stylesheet" href="http://ajax.googleapis.com/ajax/libs/jqueryui/1.8/themes/base/jquery-ui.css">
+    <link rel="stylesheet" href="/main.css">
+
+    <link rel="apple-touch-icon" sizes="57x57" href="https://assets.crossref.org/favicon/apple-touch-icon-57x57.png">
+    <link rel="apple-touch-icon" sizes="60x60" href="https://assets.crossref.org/favicon/apple-touch-icon-60x60.png">
+    <link rel="apple-touch-icon" sizes="72x72" href="https://assets.crossref.org/favicon/apple-touch-icon-72x72.png">
+    <link rel="apple-touch-icon" sizes="76x76" href="https://assets.crossref.org/favicon/apple-touch-icon-76x76.png">
+    <link rel="apple-touch-icon" sizes="114x114" href="https://assets.crossref.org/favicon/apple-touch-icon-114x114.png">
+    <link rel="apple-touch-icon" sizes="120x120" href="https://assets.crossref.org/favicon/apple-touch-icon-120x120.png">
+    <link rel="apple-touch-icon" sizes="144x144" href="https://assets.crossref.org/favicon/apple-touch-icon-144x144.png">
+    <link rel="apple-touch-icon" sizes="152x152" href="https://assets.crossref.org/favicon/apple-touch-icon-152x152.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="https://assets.crossref.org/favicon/apple-touch-icon-180x180.png">
+    <link rel="icon" type="image/png" href="https://assets.crossref.org/favicon/favicon-32x32.png" sizes="32x32">
+    <link rel="icon" type="image/png" href="https://assets.crossref.org/favicon/android-chrome-192x192.png" sizes="192x192">
+    <link rel="icon" type="image/png" href="https://assets.crossref.org/favicon/favicon-96x96.png" sizes="96x96">
+    <link rel="icon" type="image/png" href="https://assets.crossref.org/favicon/favicon-16x16.png" sizes="16x16">
+    <link rel="manifest" href="https://assets.crossref.org/favicon/manifest.json">
+    <link rel="mask-icon" href="https://assets.crossref.org/favicon/safari-pinned-tab.svg" color="#5bbad5">
+    <meta name="apple-mobile-web-app-title" content="Crossref">
+    <meta name="application-name" content="Crossref">
+    <meta name="msapplication-TileColor" content="#da532c">
+    <meta name="msapplication-TileImage" content="https://assets.crossref.org/favicon/mstile-144x144.png">
+    <meta name="theme-color" content="#ffffff">
+
+    <script src="/lib/jquery/dist/jquery.min.js"></script>
+    <script src="/lib/jquery-ui/jquery-ui.js"></script>
+  </head>
+  <body>
+    <nav class="navbar navbar-default navbar-fixed-top" role="navigation">
+      <div class="container">
+        <div class="navbar-header">
+          <div class="pull-left">
+            <a class="navbar-brand" href="/">
+              <span style="font-size: .9em;">&nbsp;Crossref Event Data</span>
+            </a>
+          </div>
+        </div>
+        <div id="navbar" class="navbar-collapse collapse">
+          <div class="nav navbar-nav navbar-right">
+          <img src="https://assets.crossref.org/logo/crossref-logo-100.png" style="margin-top: 10px; margin-bottom: 10px">
+          </div>
+        </div>
+      </div>
+    </nav>
+    <div class="container">
+        <div class="row">
+            <div class="col-md-12">
+        
+            <link href='/lib/font-awesome/css/font-awesome.min.css' media='screen' rel='stylesheet' type='text/css' />
+            <script src="/lib/react/react.js"></script>
+            <script src="/lib/react/JSXTransformer.js"></script>
+            <script src="/lib/moment/moment.js"></script>
+
+            <script>
+            
+            </script>
+
+            <script type="text/jsx">
+
+            window.counter = (function() {
+                var count = 0;
+
+                return function() {
+                    count ++;
+                    return count;
+                }})();
+
+            var Entry = React.createClass({
+
+                fetchDoiMetadata: function(doi, callback) {
+                    $.ajax({
+                        url: doi,
+                        headers: {"Accept": "application/vnd.citationstyles.csl+json"}
+                    }).success(function(result) {
+                      result.author = result.author && result.author.map(function(author) {
+                            var name = author.family;
+                            var literal = author.literal;
+
+                            if (author.given && author.given.length > 0) {
+                                name = name + ", " + author.given[0];
+                            }
+
+                            if (literal) {
+                                return literal;
+                            }
+
+                            return name}).join(", ");
+
+                      result.type = itemTypes[result.type] || "";
+
+                      callback(result);
+                    });
+                },
+
+                getInitialState: function() {
+                  return ({subjMetadata: this.props.item.subj || {},
+                           objMetadata: this.props.item.obj || {}});
+                },
+
+                componentDidMount: function () {
+                  var self = this;
+
+                  try {
+                    var url = new URL(self.props.item.subj_id);
+                    if (url.hostname.endsWith("doi.org")) {
+                      self.fetchDoiMetadata(
+                        url,
+                        function(data) {
+                          self.setState({subjMetadata: data});
+                      });
+                    }
+                  } catch (e) {}
+
+
+                  try {
+                    var url = new URL(self.props.item.obj_id);
+                    if (url.hostname.endsWith("doi.org")) {
+                      self.fetchDoiMetadata(
+                        url,
+                        function(data) {
+                          self.setState({objMetadata: data});
+                      });
+                    }
+                  } catch (e) {}
+                },
+
+                render: function() {
+                    var item = this.props.item;
+                    var action = "";
+                    if (item.message_action == "delete") {
+                      action = "(removed)";
+                    }
+  
+                    var subjAuthorUrl = null;
+                    if (this.state.subjMetadata && this.state.subjMetadata.author && this.state.subjMetadata.author.literal && this.state.subjMetadata.author.literal.startsWith("http")) {
+                      subjAuthorUrl = this.state.subjMetadata.author.literal;
+                    }
+                    
+                    var objAuthorUrl = null;
+                    if (this.state.objMetadata && this.state.objMetadata.author && this.state.objMetadata.author.literal && this.state.objMetadata.author.literal.startsWith("http")) {
+                      objAuthorUrl = this.state.objMetadata.author.literal;
+                    }
+
+
+                    return (<tr>
+                            <td><div><small><div><small>{this.state.subjMetadata.type || item['source_id']}</small></div></small></div>
+                                <div className="itemTitle"><a href={item.subj_id}>{this.state.subjMetadata.title}</a></div>
+                                <a href={item.subj_id}><i className="fa fa-external-link"></i>&nbsp;{decodeURI(item.subj_id)}</a>
+                                {this.state.subjMetadata.author ?
+
+                                  (subjAuthorUrl ?
+                                    <div>Authors: <a href={subjAuthorUrl}>{subjAuthorUrl}</a></div> :
+                                    <div>Authors: {this.state.subjMetadata.author}</div>)
+                                  : <span></span>}
+                            </td>
+
+                            <td className="citeAction"><strong>{item.relation_type_id}</strong> {{action}}<br />
+                            {moment(item.occurred_at).calendar()}
+                            </td>
+            
+                            <td><div><small><div><small>{this.state.objMetadata.type || item['source_id']}</small></div></small></div>
+                                <div className="itemTitle"><a href={item.obj_id}>{this.state.objMetadata.title}</a></div>
+                                <a href={item.obj_id}><i className="fa fa-external-link"></i>&nbsp;{decodeURI(item.obj_id)}</a>
+                                {this.state.objMetadata.author ?
+
+                                  (objAuthorUrl ?
+                                    <div>Authors: <a href={objAuthorUrl}>{objAuthorUrl}</a></div> :
+                                    <div>Authors: {this.state.objMetadata.author}</div>)
+                                  : <span></span>}
+                            </td>
+
+                        </tr>);
+                }
+            });
+
+            var StreamTable = React.createClass({
+                getInitialState: function () {
+                    return {items: [],
+                        connectionAttempts: 0};
+                },
+
+                componentDidMount: function () {
+                    this.attemptConnect();
+                },
+
+                attemptConnect: function () {
+                    var self = this;
+
+                    this.setState({
+                        connectionAttempts: this.state.connectionAttempts + 1,
+                        error: false
+                    });
+                    
+                    var source = window.location.hash.substring(1);
+                    if (source == "") { source = "all"; }
+                    var url = "ws://" + window.location.host + "/socket";
+                    var friendlySourceName = "all sources";
+                    if (source != "all") {
+                      url += "?source_id=" + source;
+                      friendlySourceName = source.substring(0,1).toUpperCase() + source.substring(1);
+                    }
+
+                    this.setState({"friendlySourceName": friendlySourceName});
+                    
+                    var socket = new WebSocket(url);
+
+                    socket.onopen = function() {
+                      socket.send("items 20");
+                      socket.send("start");
+                    }
+
+
+                    socket.onmessage = function(item) {
+                        var count = counter();
+
+                        var data = JSON.parse(item.data);
+
+                        // Set unique key for event (react needs this).
+                        data.key = count;
+                        var items = self.state.items;
+                        items.unshift(data);
+
+                        // Limit to 20.
+                        items = items.slice(0, 20);
+
+                        self.setState({"items": items});
+                    };
+
+                    socket.onerror = function() {
+                        self.setState({error: true});
+                        setTimeout(function(){self.attemptConnect()}, 2000);
+                    }
+                },
+
+                render: function() {
+                    if (this.state.error) {
+                        return <p className="error">Sorry there was an error connecting to the server. Please refresh the page or email labs@crossref.org if you are having continued problems. Number of attempts to connect: {this.state.connectionAttempts}.</p>
+                    }
+                    
+                    return <div>
+                      <h2>Live data from {this.state.friendlySourceName}.</h2>
+                    <table className="table table-striped event-table"><thead></thead><tbody>{this.state.items.map(function(item) {return <Entry item={item} key={item.key} />})}</tbody></table></div>;
+                }});
+
+            React.render(
+                <div>
+                <StreamTable />
+                </div>,
+                document.getElementById('content')
+            );
+
+            // from https://github.com/CrossRef/cayenne/blob/master/src/cayenne/item_tree.clj#L9
+            window.itemTypes = {
+                "journal":  "Journal",
+                "article":  "Article",
+                "journal-article":  "Journal Article",
+                "journal-issue":  "Journal Issue",
+                "journal-volume":  "Journal Volume",
+                "proceedings":  "Proceedings",
+                "proceedings-series":  "Proceedings Series",
+                "proceedings-article":  "Conference Paper",
+                "report":  "Report",
+                "report-series":  "Report Series",
+                "standard":  "Standard",
+                "standard-series":  "Standard Series",
+                "dataset":  "Dataset",
+                "edited-book":  "Book",
+                "monograph":  "Monograph",
+                "reference-book":  "Reference",
+                "book":  "Book",
+                "book-series":  "Book Series",
+                "book-set":  "Book Set",
+                "chapter":  "Chapter",
+                "section":  "Section",
+                "part":  "Part",
+                "track":  "Track",
+                "reference-entry":  "Entry",
+                "dissertation":  "Dissertation",
+                "component":  "Component",
+                "image":  "Image",
+                "model":  "Model",
+                "film":  "Film",
+                "other":  "Other"};
+
+            
+
+            </script>
+
+            <div class='container' id='content'>
+            <p class="strong">If you are having problems viewing this page please email labs@crossref.org . This page requires JavaScript and a modern browser to work.</p>
+            </div>
+        </div>
+      </div>
+      
+      <div class="col-md-12">
+        <div class="panel panel-default">
+          <div class="panel-body">
+             This is a <a href="http://labs.crossref.org">Crossref Labs</a> project. More infomation at <a href="http://eventdata.crossref.org">eventdata.crossref.org</a>. 
+          </div>
+        </div>
+      </div>
+     </div>         
+    <script src="/lib/bootstrap/dist/js/bootstrap.min.js"></script>
+    <script src="/lib/bootstrap/dist/js/bootstrap.js" ></script>
+  </body>
+</html>

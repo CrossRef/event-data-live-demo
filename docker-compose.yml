@@ -1,0 +1,22 @@
+version: '2'
+services:
+  demo:
+    depends_on:
+     - redis
+    user: deploy
+    build: .
+    ports:
+     - '8101:8101'
+    volumes:
+     - .:/code
+     - ./.m2-cache:/home/deploy/.m2
+    environment:
+     - PORT=8101
+     - REDIS_HOST=redis
+     - REDIS_PORT=6379
+     - REDIS_DB=0
+     - JWT_SECRETS=TEST,TEST2
+     - STATUS_SERVICE=http://138.201.202.133:8003
+
+  redis:
+    image: redis
