@@ -40,6 +40,3 @@ Copyright © Crossref
 
 Distributed under the The MIT License (MIT).
 
-## TODO
-
-Filter
