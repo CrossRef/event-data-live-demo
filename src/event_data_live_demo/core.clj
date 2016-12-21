@@ -1,6 +1,6 @@
 (ns event-data-live-demo.core
   (:require [clojure.data.json :as json]
-            [clojure.tools.logging :as l])
+            [clojure.tools.logging :as log])
   (:require [org.httpkit.server :as server]
             [config.core :refer [env]]
             [compojure.core :refer [defroutes GET POST]]
@@ -30,13 +30,20 @@
 
 (def redis-store
   "A redis connection for storing subscription and short-term information."
-  (delay (redis/build redis-prefix (:redis-host env) (Integer/parseInt (:redis-port env)) (Integer/parseInt (get env :redis-db default-redis-db-str)))))
+  (delay 
+    (try
+      (redis/build redis-prefix (:redis-host env) (Integer/parseInt (:redis-port env)) (Integer/parseInt (get env :redis-db default-redis-db-str)))
+      (catch Exception e (log/error "Failed to create Redis connection" (.getMessage e))))))
 
 (defn broadcast
   "Send event to all websocket listeners."
   [data]
-    (doseq [[channel channel-options] @channel-hub]
-      (server/send! channel data)))
+  (try
+    (let [hub @channel-hub]
+    (log/info "Broadcast to " (count hub))
+      (doseq [[channel channel-options] hub]
+        (server/send! channel data)))
+    (catch Exception e (log/error "Error in broadcasting to websocket listeners " (.getMessage e)))))
 
 ; "Accept POSTed Events"
 (defresource events
@@ -60,8 +67,8 @@
       (server/on-close channel (fn [status]
                                  (swap! channel-hub dissoc channel)))
 
-     (server/on-receive channel (fn [data]
-                                  (swap! channel-hub assoc channel {}))))))
+      (server/on-receive channel (fn [data]
+                                   (swap! channel-hub assoc channel {}))))))
 
 (defroutes app-routes
   (GET "/socket" [] socket-handler)
@@ -78,13 +85,18 @@
 
 (defn run-server []
   (let [port (Integer/parseInt (:port env))]
-    (l/info "Start heartbeat")
+    (log/info "Start heartbeat")
     (at-at/every 10000 #(status/send! "live-demo" "heartbeat" "tick" 1) schedule-pool)
 
     ; Listen on pubsub and send to all listening websockets.
-    (async/thread (redis/subscribe-pubsub @redis-store pubsub-channel-name #(broadcast %)))
+    (async/thread
+      (log/info "Start redis pubsub listener in thread")
+      (try 
+        (redis/subscribe-pubsub @redis-store pubsub-channel-name #(broadcast %))
+        (catch Exception e (log/error "Error in redis pubsub listener " (.getMessage e))))
+      (log/error "Stopped listening to redis pubsub"))
 
-    (l/info "Start server on " port)
+    (log/info "Start server on " port)
     (server/run-server @app {:port port})))
 
 (defn -main

@@ -12,7 +12,7 @@ If the special value of "*" is passed as sources artifact, everything will accep
 
 You can run a local copy with Docker Compose:
 
-    docker-compose run -w /code -p "8101:8101" demo lein run
+    docker-compose run -w /usr/src/app -p "8101:8101" demo lein run
 
 and send a demo event:
 

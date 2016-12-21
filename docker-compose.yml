@@ -3,13 +3,12 @@ services:
   demo:
     depends_on:
      - redis
-    user: deploy
     build: .
     ports:
      - '8101:8101'
     volumes:
-     - .:/code
-     - ./.m2-cache:/home/deploy/.m2
+     - .:/usr/src/app
+     - ./.m2-cache:/home/root/.m2
     environment:
      - PORT=8101
      - REDIS_HOST=redis
