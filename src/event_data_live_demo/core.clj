@@ -38,12 +38,14 @@
 (defn broadcast
   "Send event to all websocket listeners."
   [data]
-  (try
-    (let [hub @channel-hub]
-    (log/info "Broadcast to " (count hub))
-      (doseq [[channel channel-options] hub]
-        (server/send! channel data)))
-    (catch Exception e (log/error "Error in broadcasting to websocket listeners " (.getMessage e)))))
+  ; Heartbeat is sent through pubsub. Don't rebroadcast it.
+  (when-not (= data "HEARTBEAT")
+    (try
+      (let [hub @channel-hub]
+      (log/info "Broadcast to " (count hub))
+        (doseq [[channel channel-options] hub]
+          (server/send! channel data)))
+      (catch Exception e (log/error "Error in broadcasting to websocket listeners " (.getMessage e))))))
 
 ; "Accept POSTed Events"
 (defresource events
@@ -87,6 +89,12 @@
   (let [port (Integer/parseInt (:port env))]
     (log/info "Start heartbeat")
     (at-at/every 10000 #(status/send! "live-demo" "heartbeat" "tick" 1) schedule-pool)
+
+    ; Send a heartbeat every second via pubsub. Log if there was an error sending it.
+    (at-at/every 1000 #(try
+                         (redis/publish-pubsub @redis-store pubsub-channel-name "HEARTBEAT")
+                         (catch Exception e (log/error "Error sending heartbeat via pubsub:" (.getMessage e))))
+                      schedule-pool)
 
     ; Listen on pubsub and send to all listening websockets.
     (async/thread
