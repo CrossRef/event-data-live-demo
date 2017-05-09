@@ -1,0 +1,245 @@
+<html>
+	<canvas width="1000" height="1000" id="canvas"></canvas>
+	<script>
+		
+		var SOURCES = ["crossref", "datacite", "hypothesis", "newsfeeds", "reddit", "reddit-links", "stackexchange", "twitter", "web", "wikipedia", "wordpressdotcom"];
+
+		var PIXEL_WIDTH = 1000;
+		var PIXEL_HEIGHT = 500;
+		var NUM_VALUES = 12000;
+		var LANE_SPACING = 10; // pixels between lanes.
+		var WINDOW_HZ = 30;
+
+		// Count per second.
+		var PER_WHAT = 1000;
+
+		function windowedAverage(updateHz) {
+			var w = {events: []};
+			var lastValue = 0;
+			var velocity = 0;
+			var smoothedValue = 0;
+			var DAMP = 2;
+
+			w.ping = function() {
+				w.events.push(new Date());
+			}
+
+			w.tick = function() {
+				var filtered = [];
+				var cutoff = new Date() - PER_WHAT;
+				
+				for (var i = 0; i < w.events.length; i++) {
+					if (w.events[i] > cutoff) {
+						filtered.push(w.events[i]);
+					}
+				}
+
+				w.events = filtered;
+
+				var currentVal = w.events.length;
+				velocity = (currentVal - lastValue) / 2;
+				velocity /= DAMP;
+
+				lastValue += velocity;
+			};
+
+			w.getValue = function() {
+				return lastValue;
+			}
+
+			setInterval(function() {w.tick();}, (1 / updateHz) * 1000);
+
+			return w;
+		}
+
+		function construct(_sources, _pixelWidth, _pixelHeight, _numValues, _graphics, _canvas, _windowHz) {
+			
+			var structure = {};
+			
+			var sources = _sources;
+			var pixelWidth = _pixelWidth;
+			var numValues = _numValues;
+			var pixelHeight = _pixelHeight;
+			var maxHeightPerSource = pixelHeight / sources.length;
+			var graphics = _graphics;
+			var canvas = _canvas;
+			var windowHz = _windowHz;
+
+			for (var i = 0; i < sources.length; i++) {
+				let source = sources[i];
+				structure[source] = {
+					// Source values, time-oriented.
+					values: new Float32Array(numValues),
+
+					// Scaled per-pixel values.
+					pixels: new Float32Array(pixelWidth),
+					
+					window: windowedAverage(windowHz),
+					currentWindowTarget: 0
+				}
+			}
+
+			// Shift but don't reset value (so it can be updated asycnronously).
+			structure.shift = function() {
+				for (var i = 0; i < sources.length; i++) {
+
+					let source = sources[i];
+					let values = structure[source].values;
+
+					values[0] = structure[source].window.getValue();
+
+					for (var j = numValues; j > 0 ; j -= 1) {
+						values[j] = values[j-1];
+					}
+				}
+			}
+
+			structure.ping = function (source) {
+				structure[source].window.ping();
+			}
+
+			function scale(t) {
+				var y = Math.sqrt(t/3) * 20;
+				return Math.ceil(y);
+			}
+
+			// Don't re-allocate every project loop.
+			var tempAccumulator = new Float32Array(pixelWidth);
+
+			structure.project = function() {
+				for (var i = 0; i < sources.length; i++) {
+					let source = sources[i];
+					let values = structure[source].values;
+					let pixels = structure[source].pixels;
+
+					// Initialize.
+					for (var j = 0; j < pixelWidth; j++) {
+						pixels[j] = 0;
+						tempAccumulator[j] = 0;
+					}
+
+					// Lossy project values onto pixels.
+					for (var j = 0; j < numValues; j++) {
+						var x = scale(j);
+						pixels[x] += values[j];
+						if (values[x] > 0) {
+							tempAccumulator[x] ++;
+						}
+					}			
+
+					// Average out pixel values (as they were added).
+					var maxValue = 1;
+					for (var j = 0; j < pixelWidth; j++) {
+						if (tempAccumulator[j] > 0) {
+							pixels[j] /= tempAccumulator[j];
+						}
+						maxValue = Math.max(maxValue, pixels[j]);
+					}
+
+					// Then normalize values to [0,1].
+					// TODO Normalize for all sources?
+					// TODO add LANE_SPACING into height cals plus render
+					for (var j = 0; j < pixelWidth; j++) {
+						pixels[j] = pixels[j] / maxValue;
+					}
+
+					var xyz;
+					
+				}
+			}
+
+			structure.draw = function() {
+				canvas.width = canvas.width;
+				graphics.font = "" + Math.ceil(maxHeightPerSource * 0.5) + "px sans-serif";
+
+				for (var i = 0; i < sources.length; i++) {
+					graphics.setFillColor("#f0f0f0");
+					graphics.fillRect(0,
+									  (i * maxHeightPerSource) + LANE_SPACING / 2,
+									  pixelWidth,
+									  maxHeightPerSource - (LANE_SPACING / 2));
+
+					let source = sources[i];
+					let pixels = structure[source].pixels;
+					
+					graphics.setFillColor("#ccc");
+
+					graphics.fillText(source + " " + Math.ceil(structure[source].window.getValue()) + " per second", 10, (i + 0.5) * maxHeightPerSource);
+
+					var begin = false;
+					
+					graphics.setFillColor("#111");
+
+					graphics.beginPath();
+
+					var y = 0;
+					var yVelocity = 0;
+
+					for (var j = 0; j < numValues; j++) {
+
+						if (pixels[j] > 0) {
+							if (!begin) {
+								graphics.beginPath();
+								y = (i * maxHeightPerSource) + (maxHeightPerSource - pixels[j] * maxHeightPerSource);
+								graphics.moveTo(pixelWidth, y);
+								begin = true;
+							} else {
+								
+								var newY = (i * maxHeightPerSource) + (maxHeightPerSource - pixels[j] * maxHeightPerSource);
+								yVelocity += (newY - y)/10;
+								yVelocity /= 2;
+								y += yVelocity;
+								graphics.lineTo(pixelWidth-j, y);
+
+								graphics.fillRect(pixelWidth-j, newY, 1, 1)
+							}
+						}
+					}
+					graphics.stroke();
+				}
+			}
+
+			structure.render = function() {
+				structure.project();
+				structure.draw();
+			}
+		
+			structure.setValue = function(sourceName, newValue) {
+				structure[sourceName].values[0] = newValue;
+			}
+
+			return structure;
+		}
+
+		var canvas = document.getElementById("canvas");
+		var graphics = canvas.getContext("2d");
+
+		var structure = construct(SOURCES, PIXEL_WIDTH, PIXEL_HEIGHT, NUM_VALUES, graphics, canvas, WINDOW_HZ);		
+
+		function shift() {
+			structure.shift();
+		}
+
+		function render() {
+			structure.render();
+		}
+
+		window.setInterval(shift, 10);
+		window.setInterval(render, 100);
+
+		var url = "wss://live.eventdata.crossref.org/socket";
+        
+        var socket = new WebSocket(url);
+
+        socket.onopen = function() {
+          socket.send("items 20");
+          socket.send("start");
+        }
+
+
+        socket.onmessage = function(item) {
+            var data = JSON.parse(item.data);
+            structure.ping(data.source_id);
+        };
+	</script>
+</html>
