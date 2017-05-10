@@ -2,7 +2,8 @@
 	<canvas width="1000" height="1000" id="canvas"></canvas>
 	<script>
 		
-		var SOURCES = ["crossref", "datacite", "hypothesis", "newsfeeds", "reddit", "reddit-links", "stackexchange", "twitter", "web", "wikipedia", "wordpressdotcom"];
+		var SOURCES = ["wikipedia","crossref", "datacite", "hypothesis", "newsfeeds", "reddit", "reddit-links", "stackexchange", "twitter", "web", "wordpressdotcom"];
+		// SOURCES = ["wikipedia"];
 
 		var PIXEL_WIDTH = 1000;
 		var PIXEL_HEIGHT = 500;
@@ -12,6 +13,11 @@
 
 		// Count per second.
 		var PER_WHAT = 1000;
+
+		function freqFor(i, value) {
+			
+			return Math.pow(2, ((((i + 1) * 2 + Math.sqrt(value)))/12)) * 440;
+		}
 
 		function windowedAverage(updateHz) {
 			var w = {events: []};
@@ -55,7 +61,24 @@
 		function construct(_sources, _pixelWidth, _pixelHeight, _numValues, _graphics, _canvas, _windowHz) {
 			
 			var structure = {};
+			var audio = new (window.AudioContext || window.webkitAudioContext)();
+			var gain = audio.createGain();
+			gain.connect(audio.destination);
+			gain.gain.value = 0.05;
+	
+			var delay = audio.createDelay();
+			delay.delayTime.value = 0.5;
+
+			var feedback = audio.createGain();
+			feedback.gain.value = 0.1;
+
+			delay.connect(feedback);
+			feedback.connect(delay);
+
 			
+			delay.connect(audio.destination);
+
+
 			var sources = _sources;
 			var pixelWidth = _pixelWidth;
 			var numValues = _numValues;
@@ -67,6 +90,22 @@
 
 			for (var i = 0; i < sources.length; i++) {
 				let source = sources[i];
+
+				var sourceGain = audio.createGain();
+
+				sourceGain.connect(delay);
+				sourceGain.connect(audio.destination);
+
+				sourceGain.gain.value = 0.1;
+
+				var oscillator = audio.createOscillator();
+				oscillator.type = 'triangle';
+				oscillator.frequency.value = freqFor(i, 0);
+				oscillator.connect(sourceGain);
+				oscillator.gain = 0.1;
+				oscillator.start();
+
+
 				structure[source] = {
 					// Source values, time-oriented.
 					values: new Float32Array(numValues),
@@ -75,9 +114,14 @@
 					pixels: new Float32Array(pixelWidth),
 					
 					window: windowedAverage(windowHz),
-					currentWindowTarget: 0
+					currentWindowTarget: 0,
+
+					oscillator: oscillator,
+					gain: sourceGain
 				}
 			}
+
+
 
 			// Shift but don't reset value (so it can be updated asycnronously).
 			structure.shift = function() {
@@ -99,7 +143,7 @@
 			}
 
 			function scale(t) {
-				var y = Math.sqrt(t/3) * 20;
+				var y = Math.sqrt(t/10) * 20;
 				return Math.ceil(y);
 			}
 
@@ -202,6 +246,12 @@
 			structure.render = function() {
 				structure.project();
 				structure.draw();
+
+				for (var i = 0; i < sources.length; i++) {
+					var source = sources[i];
+					structure[source].oscillator.frequency.value = freqFor(i, structure[source].window.getValue());
+					structure[source].gain.gain.value = structure[source].window.getValue() / 30 + 0.01;
+				}
 			}
 		
 			structure.setValue = function(sourceName, newValue) {
