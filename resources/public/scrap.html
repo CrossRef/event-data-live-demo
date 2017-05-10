@@ -1,0 +1,45 @@
+<html>
+<script>
+// An array that loses precision toward the end.
+		// Split into N even chunks, ecah chunk has half of the precision of the one before it.
+		// Length should be divisible by numChunks.
+		function vagueningArray(_length, _numChunks) {
+			var arr = {};
+
+			var length = _length;
+			var numChunks = _numChunks;
+
+
+			var topIndex = 0;
+			arr.chunks = [];
+			var chunkRepresentationSize = length / numChunks;
+			for (var chunkI = 0; chunkI < numChunks; chunkI++) {
+				chunkRepresentationSize /= 2;
+				var chunk = {store: new Float32Array(chunkRepresentationSize),
+							 offset: chunkI * (length / numChunks),
+							 scale: 2 ** chunkI};
+				arr.chunks.push(chunk)
+			}
+			
+			arr.get = function(i) {
+				var chunkI = Math.floor(Math.sqrt(i));
+				var inChunkI = (i - arr.chunks[chunkI].offset) / arr.chunks[chunkI].scale;
+				console.log(chunkI, i)
+			}
+
+			return arr;
+		}
+
+x = vagueningArray(8,2);
+console.log(x)
+x.get(0);
+x.get(1);
+x.get(2);
+x.get(3);
+x.get(4);
+x.get(5);
+x.get(6);
+x.get(7);
+</script>
+</html>
+

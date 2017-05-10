@@ -7,9 +7,9 @@
 
 		var PIXEL_WIDTH = 1000;
 		var PIXEL_HEIGHT = 500;
-		var NUM_VALUES = 20000;
 		var LANE_SPACING = 10; // pixels between lanes.
 		var WINDOW_HZ = 30;
+		var NUM_VALUES = 60 * 60 * WINDOW_HZ; // 1 hour at 30 hz
 
 		// Count per second.
 		var PER_WHAT = 1000;
@@ -198,6 +198,13 @@
 					oscillator: oscillator,
 					gain: sourceGain
 				}
+
+				// Random starter data.
+				// var rate = 1;
+				// for (var x = 0; x < numValues; x++) {
+				// 	rate = Math.max(0, rate + Math.random() - 0.5);
+				// 	structure[source].values[x] = rate;
+				// }
 			}
 
 
@@ -222,7 +229,8 @@
 			}
 			
 			function scale(t) {
-				return Math.floor(t*t*2);
+				// return Math.floor(t*(t/5)/4);
+				return Math.floor(t*t*2/64);
 			}
 
 			function project(from, to) {
@@ -235,14 +243,21 @@
 
 					to[j] = 0;
 
-					var c = 0;
+					// Average sampling
+					// var c = 0;
+					// var v = 0;
+					// for (var x = lBound; x < uBound; x++) {
+					// 	v += from[x];
+					// 	c++;
+					// }
+					// v /= Math.max(c, 1);
+
+					// Max sampling.
 					var v = 0;
 					for (var x = lBound; x < uBound; x++) {
-						v += from[x];
-						c++;
+						v = Math.max(v, from[x]);
 					}
-					v /= Math.max(c, 1);
-					
+
 					to[j] = v;
 					
 				}
@@ -314,7 +329,7 @@
 							averageY.push(thisY);
 							graphics.lineTo(pixelWidth-j, averageY.getValue());
 
-							// graphics.fillRect(pixelWidth-j, thisY, 1, 1)
+							graphics.fillRect(pixelWidth-j, thisY, 1, 1)
 					
 						}
 					}
