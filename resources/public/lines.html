@@ -3,7 +3,8 @@
 	<script>
 		
 		var SOURCES = ["wikipedia","crossref", "datacite", "hypothesis", "newsfeeds", "reddit", "reddit-links", "stackexchange", "twitter", "web", "wordpressdotcom"];
-		// SOURCES = ["wikipedia"];
+		// For testing.
+		// SOURCES = ["wikipedia", "datacite"];
 
 		var PIXEL_WIDTH = 1000;
 		var PIXEL_HEIGHT = 500;
@@ -186,9 +187,13 @@
 				oscillator.start();
 
 
+				structure.valuesRingI = 0;
+
 				structure[source] = {
 					// Source values, time-oriented.
-					values: new Float32Array(numValues),
+					// This is a static full ring buffer.
+					// As all ring buffers are in sync, valuesRingI is the index of all of them.
+					values: new Uint8ClampedArray(numValues),
 
 					// Scaled per-pixel values.
 					pixels: new Float32Array(pixelWidth),
@@ -207,20 +212,14 @@
 				// }
 			}
 
-
-
 			// Shift but don't reset value (so it can be updated asycnronously).
 			structure.shift = function() {
+				structure.valuesRingI = (structure.valuesRingI - 1 + numValues) % numValues;
+
 				for (var i = 0; i < sources.length; i++) {
-
-					let source = sources[i];
-					let values = structure[source].values;
-
-					values[0] = structure[source].window.getValue();
-
-					for (var j = numValues; j > 0 ; j -= 1) {
-						values[j] = values[j-1];
-					}
+					let sourceName = sources[i];
+					let source = structure[sourceName];
+					source.values[structure.valuesRingI] = source.window.getValue();
 				}
 			}
 
@@ -233,7 +232,9 @@
 				return Math.floor(t*t*2/64);
 			}
 
-			function project(from, to) {
+			// Project from `from` values array to `to` pixels array.
+			// `from` is a ring buffer!
+			function project(from, ringI, to) {
 				for (var j = 0; j < to.length - 1; j++) {
 					var lBound = scale(j);
 					var uBound = scale(j+1);
@@ -255,7 +256,8 @@
 					// Max sampling.
 					var v = 0;
 					for (var x = lBound; x < uBound; x++) {
-						v = Math.max(v, from[x]);
+						// Offset ring buffer access.
+						v = Math.max(v, from[(x + ringI) % from.length]);
 					}
 
 					to[j] = v;
@@ -278,7 +280,7 @@
                             let source = sources[i];
                             let values = structure[source].values;
                             let pixels = structure[source].pixels;
-                            project(values, pixels);
+                            project(values, structure.valuesRingI, pixels);
                     }
                 }
             }
