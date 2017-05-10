@@ -7,7 +7,7 @@
 
 		var PIXEL_WIDTH = 1000;
 		var PIXEL_HEIGHT = 500;
-		var NUM_VALUES = 12000;
+		var NUM_VALUES = 20000;
 		var LANE_SPACING = 10; // pixels between lanes.
 		var WINDOW_HZ = 30;
 
@@ -15,7 +15,6 @@
 		var PER_WHAT = 1000;
 
 		function freqFor(i, value) {
-			
 			return Math.pow(2, ((((i + 1) * 2 + Math.sqrt(value)))/12)) * 440;
 		}
 
@@ -119,7 +118,13 @@
 
 		function construct(_sources, _pixelWidth, _pixelHeight, _numValues, _graphics, _canvas, _windowHz) {
 			
+			var sources = _sources;
 			var structure = {};
+			for (var i = 0; i < sources.length; i++) {
+				let source = sources[i];
+				structure[source] = {};
+			}
+
 			var audio = new (window.AudioContext || window.webkitAudioContext)();
 			var gain = audio.createGain();
 			gain.connect(audio.destination);
@@ -137,14 +142,31 @@
 			
 			delay.connect(audio.destination);
 
+			var canvas = _canvas;
+			var pixelWidth;
+			var pixelHeight;
+			var maxHeightPerSource;
 
-			var sources = _sources;
-			var pixelWidth = _pixelWidth;
+			structure.setDimensions = function(width, height) {
+				pixelWidth = width;
+				pixelHeight = height;
+
+				for (var i = 0; i < sources.length; i++) {
+					let source = sources[i];
+					structure[source].pixels = new Float32Array(pixelWidth);
+				}
+
+				canvas.width = width;
+				canvas.height = height;
+				maxHeightPerSource = pixelHeight / sources.length;
+			}
+
+			structure.setDimensions(_pixelWidth, _pixelHeight);
+
 			var numValues = _numValues;
-			var pixelHeight = _pixelHeight;
+			
 			var maxHeightPerSource = pixelHeight / sources.length;
 			var graphics = _graphics;
-			var canvas = _canvas;
 			var windowHz = _windowHz;
 
 			for (var i = 0; i < sources.length; i++) {
@@ -249,21 +271,25 @@
 
 				for (var i = 0; i < sources.length; i++) {
 					graphics.setFillColor("#f0f0f0");
+					// graphics.setFillColor("#777");
 					graphics.fillRect(0,
-									  (i * maxHeightPerSource) + LANE_SPACING / 2,
+									  (i * maxHeightPerSource) + (i * LANE_SPACING),
 									  pixelWidth,
-									  maxHeightPerSource - (LANE_SPACING / 2));
+									  maxHeightPerSource);
+				}
 
+				for (var i = 0; i < sources.length; i++) {
 					let source = sources[i];
 					let pixels = structure[source].pixels;
 					
 					graphics.setFillColor("#ccc");
 
-					graphics.fillText(source + " " + Math.ceil(structure[source].window.getValue()) + " per second", 10, (i + 0.5) * maxHeightPerSource);
+					graphics.fillText(source + " " + Math.ceil(structure[source].window.getValue()) + " per second", 10, (i + 0.5) * maxHeightPerSource + (i * LANE_SPACING));
 
 					var begin = false;
 					
-					graphics.setFillColor("#111");
+					graphics.setStrokeColor("#777");
+					// graphics.setFillColor("#f0f0f0");
 
 					graphics.beginPath();
 
@@ -272,20 +298,21 @@
 					var averageY = windowedAverage(10);
 
 					for (var j = 0; j < numValues; j++) {
-						if (pixels[j] > 0) {
-							if (!begin) {
-								graphics.beginPath();
-								averageY.fill((i * maxHeightPerSource) + (maxHeightPerSource - pixels[j] * maxHeightPerSource));
-								graphics.moveTo(pixelWidth, averageY.getValue());
-								begin = true;
-							} else {
-								
-								var newY = (i * maxHeightPerSource) + (maxHeightPerSource - pixels[j] * maxHeightPerSource);
-								averageY.push(newY);
-								graphics.lineTo(pixelWidth-j, averageY.getValue());
+						var thisY = (i * maxHeightPerSource) + 
+										  (maxHeightPerSource - pixels[j] * maxHeightPerSource) +
+										  + LANE_SPACING * i
+										  0;
+						if (!begin) {
+							graphics.beginPath();
+							averageY.fill(thisY);
+							graphics.moveTo(pixelWidth, averageY.getValue());
+							begin = true;
+						} else {
+							averageY.push(thisY);
+							graphics.lineTo(pixelWidth-j, averageY.getValue());
 
-								// graphics.fillRect(pixelWidth-j, newY, 1, 1)
-							}
+							// graphics.fillRect(pixelWidth-j, newY, 1, 1)
+					
 						}
 					}
 					graphics.stroke();
@@ -335,10 +362,19 @@
           socket.send("start");
         }
 
-
         socket.onmessage = function(item) {
             var data = JSON.parse(item.data);
             structure.ping(data.source_id);
         };
+
+        function resize() {
+        	structure.setDimensions(window.innerWidth, window.innerHeight);
+        }
+        resize();
+
+        window.addEventListener("resize", resize);
 	</script>
+	<style>
+	body, html { margin: 0px;} 
+	</style>
 </html>
