@@ -18,7 +18,6 @@
 			return Math.pow(2, ((((i + 1) * 2 + Math.sqrt(value)))/12)) * 440;
 		}
 
-
 		function velocityWindowedAverage(updateHz) {
 			var w = {events: []};
 			var lastValue = 0;
@@ -227,7 +226,6 @@
 			}
 
 			function project(from, to) {
-				var max = 1;
 				for (var j = 0; j < to.length - 1; j++) {
 					var lBound = scale(j);
 					var uBound = scale(j+1);
@@ -246,7 +244,12 @@
 					v /= Math.max(c, 1);
 					
 					to[j] = v;
-					max = Math.max(max, v);
+					
+				}
+
+				var max = 1;
+				for (j = 0; j < from.length; j++) {
+					max = Math.max(max, from[j]);
 				}
 
 				for (var j = 0; j < to.length - 1; j++) {
@@ -311,7 +314,7 @@
 							averageY.push(thisY);
 							graphics.lineTo(pixelWidth-j, averageY.getValue());
 
-							// graphics.fillRect(pixelWidth-j, newY, 1, 1)
+							// graphics.fillRect(pixelWidth-j, thisY, 1, 1)
 					
 						}
 					}
