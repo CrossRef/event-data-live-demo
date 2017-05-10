@@ -19,7 +19,8 @@
 			return Math.pow(2, ((((i + 1) * 2 + Math.sqrt(value)))/12)) * 440;
 		}
 
-		function windowedAverage(updateHz) {
+
+		function velocityWindowedAverage(updateHz) {
 			var w = {events: []};
 			var lastValue = 0;
 			var velocity = 0;
@@ -56,6 +57,64 @@
 			setInterval(function() {w.tick();}, (1 / updateHz) * 1000);
 
 			return w;
+		}
+
+		function windowedAverage(_length) {
+			var length = _length;
+			var start = 0
+			var average = {ringBuffer: new Float32Array(length)};
+
+			average.reset = function() {
+				average.ringBuffer.fill(0);
+			}
+
+			average.fill = function(value) {
+				average.ringBuffer.fill(value);
+			}
+
+
+			average.push = function(value) {
+				average.ringBuffer[start] = value;
+				start = ++ start % length;
+			}
+
+			average.getValue = function() {
+				return average.ringBuffer.reduce(function(a,b){ return a + b}) / length;
+			}
+
+			return average;
+		}
+
+		function autoShiftingAverage(_length, _shiftHz) {
+			var length = _length;
+			var shiftHz = _shiftHz;
+			var start = 0
+			var average = {ringBuffer: new Float32Array(length)};
+
+			average.fill = function(value) {
+				average.ringBuffer.fill(value);
+			}
+
+			average.reset = function() {
+				average.ringBuffer.fill(0);
+			}
+
+			average.shift = function () {
+				start = ++ start % length;
+				average.ringBuffer[start] = 0;
+			}
+
+			window.setInterval(function() {average.shift()}, (1 / shiftHz) * 1000);
+
+			average.incrBy = function(value) {
+				average.ringBuffer[start] += value;
+			}
+
+			average.getValue = function() {
+				return average.ringBuffer.reduce(function(a,b){ return a + b}) / length;
+			}
+
+			return average;
 		}
 
 		function construct(_sources, _pixelWidth, _pixelHeight, _numValues, _graphics, _canvas, _windowHz) {
@@ -113,8 +172,7 @@
 					// Scaled per-pixel values.
 					pixels: new Float32Array(pixelWidth),
 					
-					window: windowedAverage(windowHz),
-					currentWindowTarget: 0,
+					window: velocityWindowedAverage(windowHz),
 
 					oscillator: oscillator,
 					gain: sourceGain
@@ -139,58 +197,51 @@
 			}
 
 			structure.ping = function (source) {
-				structure[source].window.ping();
+	           structure[source] && structure[source].window.ping();
 			}
-
+			
 			function scale(t) {
-				var y = Math.sqrt(t/10) * 20;
-				return Math.ceil(y);
+				return Math.floor(t*t*2);
 			}
 
-			// Don't re-allocate every project loop.
-			var tempAccumulator = new Float32Array(pixelWidth);
-
-			structure.project = function() {
-				for (var i = 0; i < sources.length; i++) {
-					let source = sources[i];
-					let values = structure[source].values;
-					let pixels = structure[source].pixels;
-
-					// Initialize.
-					for (var j = 0; j < pixelWidth; j++) {
-						pixels[j] = 0;
-						tempAccumulator[j] = 0;
+			function project(from, to) {
+				var max = 1;
+				for (var j = 0; j < to.length - 1; j++) {
+					var lBound = scale(j);
+					var uBound = scale(j+1);
+					if (uBound > from.length) {
+						break;
 					}
 
-					// Lossy project values onto pixels.
-					for (var j = 0; j < numValues; j++) {
-						var x = scale(j);
-						pixels[x] += values[j];
-						if (values[x] > 0) {
-							tempAccumulator[x] ++;
-						}
-					}			
+					to[j] = 0;
 
-					// Average out pixel values (as they were added).
-					var maxValue = 1;
-					for (var j = 0; j < pixelWidth; j++) {
-						if (tempAccumulator[j] > 0) {
-							pixels[j] /= tempAccumulator[j];
-						}
-						maxValue = Math.max(maxValue, pixels[j]);
+					var c = 0;
+					var v = 0;
+					for (var x = lBound; x < uBound; x++) {
+						v += from[x];
+						c++;
 					}
-
-					// Then normalize values to [0,1].
-					// TODO Normalize for all sources?
-					// TODO add LANE_SPACING into height cals plus render
-					for (var j = 0; j < pixelWidth; j++) {
-						pixels[j] = pixels[j] / maxValue;
-					}
-
-					var xyz;
+					v /= Math.max(c, 1);
 					
+					to[j] = v;
+					max = Math.max(max, v);
+				}
+
+				for (var j = 0; j < to.length - 1; j++) {
+					to[j] /= max;
 				}
 			}
+
+            structure.project = function() {
+	            structure.project = function () {
+                    for (var i = 0; i < sources.length; i++) {
+                            let source = sources[i];
+                            let values = structure[source].values;
+                            let pixels = structure[source].pixels;
+                            project(values, pixels);
+                    }
+                }
+            }
 
 			structure.draw = function() {
 				canvas.width = canvas.width;
@@ -218,24 +269,22 @@
 
 					var y = 0;
 					var yVelocity = 0;
+					var averageY = windowedAverage(10);
 
 					for (var j = 0; j < numValues; j++) {
-
 						if (pixels[j] > 0) {
 							if (!begin) {
 								graphics.beginPath();
-								y = (i * maxHeightPerSource) + (maxHeightPerSource - pixels[j] * maxHeightPerSource);
-								graphics.moveTo(pixelWidth, y);
+								averageY.fill((i * maxHeightPerSource) + (maxHeightPerSource - pixels[j] * maxHeightPerSource));
+								graphics.moveTo(pixelWidth, averageY.getValue());
 								begin = true;
 							} else {
 								
 								var newY = (i * maxHeightPerSource) + (maxHeightPerSource - pixels[j] * maxHeightPerSource);
-								yVelocity += (newY - y)/10;
-								yVelocity /= 2;
-								y += yVelocity;
-								graphics.lineTo(pixelWidth-j, y);
+								averageY.push(newY);
+								graphics.lineTo(pixelWidth-j, averageY.getValue());
 
-								graphics.fillRect(pixelWidth-j, newY, 1, 1)
+								// graphics.fillRect(pixelWidth-j, newY, 1, 1)
 							}
 						}
 					}
