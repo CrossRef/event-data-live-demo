@@ -1,399 +1,356 @@
 <html>
 	<canvas width="1000" height="1000" id="canvas"></canvas>
 	<script>
+	var VelocitySmoothedValue = function(_updateFrequency) {
+  		var DAMP = 5;
+  		var updateFrequency = _updateFrequency;
+  		var target = 0;
+  		var value = 0;
+  		var velocity = 0;
+
+  		function tick() {
+  			// Otherwise, don't get into ridiculous asymptotic oscillation.
+  			// This also prevents zero-crossing.
+  			if (Math.abs(target - value) >= 1) {
+  				value += velocity;
+	  			velocity = (target - value) / DAMP;
+  			}
+  		}
+
+  		this.getValue = function() {
+  			return value;
+  		}
+
+  		this.setTarget = function(newTarget) {
+  			target = newTarget;
+  		}
+
+  		window.setInterval(tick, 1 / updateFrequency * 1000);
+  		return this;
+	}
+
+	// Live windowed average over the given time period.
+	var TimeWindowAverage = function(periodMs) {
+		// Expected maximum per time period. Not a problem if exceeded.
+		var EXPECTED_MAX = 10;
+
+		// Ringbuffer of timestamps.
+		var ringBufferSize = EXPECTED_MAX * periodMs;
+		var ringBuffer = new Float64Array(ringBufferSize);
+		var ringI = 0;
+
+		// Don't worry if we over-write, it just means we saturate the counter.
+		this.ping = function() {
+			ringBuffer[ringI] = new Date().getTime();
+			ringI = (ringI + 1) % ringBufferSize;
+		}
+
+		// How many ticks within the window?
+		this.getValue = function() {
+			var then = new Date().getTime() - periodMs;
+			
+			var value = 0;
+			for (var i=0;i < ringBufferSize; i++) {
+				if (ringBuffer[i] > then) {
+					value++;
+				}
+			}
+			return value;
+		}
+
+		return this;
+	}
+
+	// Velocity smoothed tick rate.
+	var SmoothedRateCounter = function(_updateFrequency, _periodMs) {
+		var updateFrequency = _updateFrequency;
+		var periodMs = _periodMs;
+		var value = new VelocitySmoothedValue(updateFrequency);
+		var average = new TimeWindowAverage(periodMs);
+
+		this.ping = function() {
+			average.ping();
+		}
+
+		this.getValue = function() {
+			return value.getValue();
+		}
+
+		function tick() {
+			value.setTarget(average.getValue());
+		}
+
+		// updateFrequency used both to clock smoother and poll to update smoother target value.
+		window.setInterval(tick, 1 / updateFrequency * 1000);
+
+		return this;
+	}
+
+	// Appears to be int array, but loses precision toward the end.
+	// First region has full precision, second region has half etc.
+	var BASE = 1.01;
+	var VagueningRateHistory = function(_size) {
+		var size = _size;
+		var logBase = BASE;
+		var allocatedSize = Math.floor(Math.log(size) / Math.log(logBase));
+
+		var values = new Float32Array(allocatedSize);		
+
+		this.getValue = function(logicalIndex) {
+			var offset = Math.floor(Math.log(logicalIndex) / Math.log(logBase));
+			var multipler = Math.pow(offset, logBase);
+
+			return values[offset] / multipler;
+		}
+
+		this.getMaxValue = function() {
+			var maxValue = 0;
+			for (var i = 0; i < allocatedSize; i++) {
+				var numRepresented = Math.pow(i, logBase);
+				for (var j=0; j < numRepresented; j++) {
+					maxValue = Math.max(maxValue, values[i] / numRepresented);
+				}
+			}
+			return maxValue;
+		}
+
+		// Optionally push a value on the end and shift down by one logical value.
+		// This is the only way data gets in!
+		this.shift = function(value) {
+			maxValue = 0;
+			for (var i=allocatedSize-1;i>1;i--) {
+
+				// If we borrow zero we'll get a divide-by-zero, and in that case there's nothing to shift on.
+				var borrowedValue = values[i-1] / Math.pow((i-1), logBase);
+				values[i-1] -= borrowedValue;
+
+				if (!isNaN(borrowedValue)) {
+					values[i] += borrowedValue;// * Math.pow(i, logBase);	
+					maxValue = Math.max(values[i]||0, maxValue / Math.pow(i, logBase));
+				}
+
+			}
+
+			values[1] = value || 0;
+			values[0] = value || 0;
+
+		}
+
+		this.iterateLogical = function(callback) {
+			var k = 0;
+			for (var i = 0; i < allocatedSize; i++) {
+				var numRepresented = Math.pow(i, logBase);
+				for (var j=0; j < numRepresented; j++) {
+					callback(k, values[i] / numRepresented);
+					k++;
+				}
+			}
+		}
+
+		// Iterate in the logical value domain; don't interpolate x values.
+		this.iterate = function(callback) {
+			var x = 0;
+			for (var i = 0; i < allocatedSize; i++) {
+				var numRepresented = Math.pow(i, logBase);
+				callback(x, values[i] / numRepresented);
+				x += numRepresented;
+			}	
+		}
+
+		return this;
+	}
+
+	// A tone on the whole-tone-scale that's modulated by a value.
+	var AwfulNoise = function(_i, _bus, _audio) {
+		var value = 0;
+		var i = _i;
+		var bus = _bus;
+		var audio = _audio;
+
+		// Frequency for note i plus modulation.
+		function freqFor(i, modulation) {
+			return Math.pow(2, ((((i + 1) * 2 + Math.sqrt(modulation)))/12)) * 440;
+		}
+
+		var sourceGain = audio.createGain();
+
+		sourceGain.connect(bus);
+		sourceGain.gain.value = 0.1;
+		var oscillator = audio.createOscillator();
+		oscillator.type = 'triangle';
 		
-		var SOURCES = ["wikipedia","crossref", "datacite", "hypothesis", "newsfeeds", "reddit", "reddit-links", "stackexchange", "twitter", "web", "wordpressdotcom"];
-		// For testing.
-		// SOURCES = ["wikipedia", "datacite"];
+		oscillator.connect(sourceGain);
+		oscillator.gain = 0.1;
+		oscillator.start();
 
-		var PIXEL_WIDTH = 1000;
-		var PIXEL_HEIGHT = 500;
-		var LANE_SPACING = 10; // pixels between lanes.
-		var WINDOW_HZ = 30;
-		var NUM_VALUES = 60 * 60 * WINDOW_HZ; // 1 hour at 30 hz
-
-		// Count per second.
-		var PER_WHAT = 1000;
-
-		function freqFor(i, value) {
-			return Math.pow(2, ((((i + 1) * 2 + Math.sqrt(value)))/12)) * 440;
+		this.setValue = function(_value) {
+			value = _value;
+			oscillator.frequency.value = freqFor(i, value);
 		}
 
-		function velocityWindowedAverage(updateHz) {
-			var w = {events: []};
-			var lastValue = 0;
-			var velocity = 0;
-			var smoothedValue = 0;
-			var DAMP = 2;
+		return this;
+	}
 
-			w.ping = function() {
-				w.events.push(new Date());
+	// Plot the rate of a number of things, and the history.
+	var MultipleRatePlotter = function(_canvas, _tickHz, _countWindowMsecs,
+									   _historySize) {
+		var canvas = _canvas;
+		var tickHz = _tickHz;
+		var countWindowMsecs = _countWindowMsecs;
+		var historySize = _historySize;
+
+		// Keep keys into things so they can be added as we find out about them without disrupting the visual order.
+		var things = {};
+		var thingNames = [];
+
+		// Audio
+		var audio = new (window.AudioContext || window.webkitAudioContext)();
+		var gain = audio.createGain();
+		gain.connect(audio.destination);
+		gain.gain.setValueAtTime(0.05, 0);
+
+		var delay = audio.createDelay();
+		delay.delayTime.value = 0.5;
+
+		var feedback = audio.createGain();
+		feedback.gain.value = 0.1;
+
+		delay.connect(feedback);
+		feedback.connect(delay);
+
+		delay.connect(gain);
+
+		var bus = audio.createGain();
+		bus.connect(delay);
+		bus.connect(gain);
+
+		// Graphics
+		var context = canvas.getContext("2d");
+		var width;
+		var height;
+	    function resize() {
+	    	width = window.innerWidth;
+	    	height = window.innerHeight;
+	    	canvas.width = width;
+	    }
+	    resize();
+	    window.addEventListener("resize", resize);
+
+		this.ping = function(thingName) {
+			var thing = things[thingName];
+			if (!thing) {
+				thing = {history: new VagueningRateHistory(historySize),
+				         counter: new SmoothedRateCounter(tickHz, _countWindowMsecs),
+				     	 awfulNoise: new AwfulNoise(thingNames.length, bus, audio)};
+				thingNames.push(thingName);
+				things[thingName] = thing;
 			}
 
-			w.tick = function() {
-				var filtered = [];
-				var cutoff = new Date() - PER_WHAT;
-				
-				for (var i = 0; i < w.events.length; i++) {
-					if (w.events[i] > cutoff) {
-						filtered.push(w.events[i]);
-					}
-				}
-
-				w.events = filtered;
-
-				var currentVal = w.events.length;
-				velocity = (currentVal - lastValue) / 2;
-				velocity /= DAMP;
-
-				lastValue += velocity;
-			};
-
-			w.getValue = function() {
-				return lastValue;
-			}
-
-			setInterval(function() {w.tick();}, (1 / updateHz) * 1000);
-
-			return w;
-		}
-
-		function windowedAverage(_length) {
-			var length = _length;
-			var start = 0
-			var average = {ringBuffer: new Float32Array(length)};
-
-			average.reset = function() {
-				average.ringBuffer.fill(0);
-			}
-
-			average.fill = function(value) {
-				average.ringBuffer.fill(value);
-			}
-
-
-			average.push = function(value) {
-				average.ringBuffer[start] = value;
-				start = ++ start % length;
-			}
-
-			average.getValue = function() {
-				return average.ringBuffer.reduce(function(a,b){ return a + b}) / length;
-			}
-
-			return average;
-		}
-
-		function autoShiftingAverage(_length, _shiftHz) {
-			var length = _length;
-			var shiftHz = _shiftHz;
-			var start = 0
-			var average = {ringBuffer: new Float32Array(length)};
-
-			average.fill = function(value) {
-				average.ringBuffer.fill(value);
-			}
-
-			average.reset = function() {
-				average.ringBuffer.fill(0);
-			}
-
-			average.shift = function () {
-				start = ++ start % length;
-				average.ringBuffer[start] = 0;
-			}
-
-			window.setInterval(function() {average.shift()}, (1 / shiftHz) * 1000);
-
-			average.incrBy = function(value) {
-				average.ringBuffer[start] += value;
-			}
-
-			average.getValue = function() {
-				return average.ringBuffer.reduce(function(a,b){ return a + b}) / length;
-			}
-
-			return average;
-		}
-
-		function construct(_sources, _pixelWidth, _pixelHeight, _numValues, _graphics, _canvas, _windowHz) {
-			
-			var sources = _sources;
-			var structure = {};
-			for (var i = 0; i < sources.length; i++) {
-				let source = sources[i];
-				structure[source] = {};
-			}
-
-			var audio = new (window.AudioContext || window.webkitAudioContext)();
-			var gain = audio.createGain();
-			gain.connect(audio.destination);
-			gain.gain.value = 0.05;
-	
-			var delay = audio.createDelay();
-			delay.delayTime.value = 0.5;
-
-			var feedback = audio.createGain();
-			feedback.gain.value = 0.1;
-
-			delay.connect(feedback);
-			feedback.connect(delay);
-
-			
-			delay.connect(audio.destination);
-
-			var canvas = _canvas;
-			var pixelWidth;
-			var pixelHeight;
-			var maxHeightPerSource;
-
-			structure.setDimensions = function(width, height) {
-				pixelWidth = width;
-				pixelHeight = height;
-
-				for (var i = 0; i < sources.length; i++) {
-					let source = sources[i];
-					structure[source].pixels = new Float32Array(pixelWidth);
-				}
-
-				canvas.width = width;
-				canvas.height = height;
-				maxHeightPerSource = pixelHeight / sources.length;
-			}
-
-			structure.setDimensions(_pixelWidth, _pixelHeight);
-
-			var numValues = _numValues;
-			
-			var maxHeightPerSource = pixelHeight / sources.length;
-			var graphics = _graphics;
-			var windowHz = _windowHz;
-
-			for (var i = 0; i < sources.length; i++) {
-				let source = sources[i];
-
-				var sourceGain = audio.createGain();
-
-				sourceGain.connect(delay);
-				sourceGain.connect(audio.destination);
-
-				sourceGain.gain.value = 0.1;
-
-				var oscillator = audio.createOscillator();
-				oscillator.type = 'triangle';
-				oscillator.frequency.value = freqFor(i, 0);
-				oscillator.connect(sourceGain);
-				oscillator.gain = 0.1;
-				oscillator.start();
-
-
-				structure.valuesRingI = 0;
-
-				structure[source] = {
-					// Source values, time-oriented.
-					// This is a static full ring buffer.
-					// As all ring buffers are in sync, valuesRingI is the index of all of them.
-					values: new Uint8ClampedArray(numValues),
-
-					// Scaled per-pixel values.
-					pixels: new Float32Array(pixelWidth),
-					
-					window: velocityWindowedAverage(windowHz),
-
-					oscillator: oscillator,
-					gain: sourceGain
-				}
-
-				// Random starter data.
-				// var rate = 1;
-				// for (var x = 0; x < numValues; x++) {
-				// 	rate = Math.max(0, rate + Math.random() - 0.5);
-				// 	structure[source].values[x] = rate;
-				// }
-			}
-
-			// Shift but don't reset value (so it can be updated asycnronously).
-			structure.shift = function() {
-				structure.valuesRingI = (structure.valuesRingI - 1 + numValues) % numValues;
-
-				for (var i = 0; i < sources.length; i++) {
-					let sourceName = sources[i];
-					let source = structure[sourceName];
-					source.values[structure.valuesRingI] = source.window.getValue();
-				}
-			}
-
-			structure.ping = function (source) {
-	           structure[source] && structure[source].window.ping();
-			}
-			
-			function scale(t) {
-				// return Math.floor(t*(t/5)/4);
-				return Math.floor(t*t*2/64);
-			}
-
-			// Project from `from` values array to `to` pixels array.
-			// `from` is a ring buffer!
-			function project(from, ringI, to) {
-				for (var j = 0; j < to.length - 1; j++) {
-					var lBound = scale(j);
-					var uBound = scale(j+1);
-					if (uBound > from.length) {
-						break;
-					}
-
-					to[j] = 0;
-
-					// Average sampling
-					// var c = 0;
-					// var v = 0;
-					// for (var x = lBound; x < uBound; x++) {
-					// 	v += from[x];
-					// 	c++;
-					// }
-					// v /= Math.max(c, 1);
-
-					// Max sampling.
-					var v = 0;
-					for (var x = lBound; x < uBound; x++) {
-						// Offset ring buffer access.
-						v = Math.max(v, from[(x + ringI) % from.length]);
-					}
-
-					to[j] = v;
-					
-				}
-
-				var max = 1;
-				for (j = 0; j < from.length; j++) {
-					max = Math.max(max, from[j]);
-				}
-
-				for (var j = 0; j < to.length - 1; j++) {
-					to[j] /= max;
-				}
-			}
-
-            structure.project = function() {
-	            structure.project = function () {
-                    for (var i = 0; i < sources.length; i++) {
-                            let source = sources[i];
-                            let values = structure[source].values;
-                            let pixels = structure[source].pixels;
-                            project(values, structure.valuesRingI, pixels);
-                    }
-                }
-            }
-
-			structure.draw = function() {
-				canvas.width = canvas.width;
-				graphics.font = "" + Math.ceil(maxHeightPerSource * 0.5) + "px sans-serif";
-
-				for (var i = 0; i < sources.length; i++) {
-					graphics.setFillColor("#f0f0f0");
-					// graphics.setFillColor("#777");
-					graphics.fillRect(0,
-									  (i * maxHeightPerSource) + (i * LANE_SPACING),
-									  pixelWidth,
-									  maxHeightPerSource);
-				}
-
-				for (var i = 0; i < sources.length; i++) {
-					let source = sources[i];
-					let pixels = structure[source].pixels;
-					
-					graphics.setFillColor("#ccc");
-
-					graphics.fillText(source + " " + Math.ceil(structure[source].window.getValue()) + " per second", 10, (i + 0.5) * maxHeightPerSource + (i * LANE_SPACING));
-
-					var begin = false;
-					
-					graphics.setStrokeColor("#777");
-					// graphics.setFillColor("#f0f0f0");
-
-					graphics.beginPath();
-
-					var y = 0;
-					var yVelocity = 0;
-					var averageY = windowedAverage(10);
-
-					for (var j = 0; j < numValues; j++) {
-						var thisY = (i * maxHeightPerSource) + 
-										  (maxHeightPerSource - pixels[j] * maxHeightPerSource) +
-										  + LANE_SPACING * i
-										  0;
-						if (!begin) {
-							graphics.beginPath();
-							averageY.fill(thisY);
-							graphics.moveTo(pixelWidth, averageY.getValue());
-							begin = true;
-						} else {
-							averageY.push(thisY);
-							graphics.lineTo(pixelWidth-j, averageY.getValue());
-
-							graphics.fillRect(pixelWidth-j, thisY, 1, 1)
-					
-						}
-					}
-					graphics.stroke();
-				}
-			}
-
-			structure.render = function() {
-				structure.project();
-				structure.draw();
-
-				for (var i = 0; i < sources.length; i++) {
-					var source = sources[i];
-					structure[source].oscillator.frequency.value = freqFor(i, structure[source].window.getValue());
-					structure[source].gain.gain.value = structure[source].window.getValue() / 30 + 0.01;
-				}
-			}
-		
-			structure.setValue = function(sourceName, newValue) {
-				structure[sourceName].values[0] = newValue;
-			}
-
-			return structure;
-		}
-
-		var canvas = document.getElementById("canvas");
-		var graphics = canvas.getContext("2d");
-
-		var structure = construct(SOURCES, PIXEL_WIDTH, PIXEL_HEIGHT, NUM_VALUES, graphics, canvas, WINDOW_HZ);		
-
-		function shift() {
-			structure.shift();
+			thing.counter.ping();
 		}
 
 		function render() {
-			structure.render();
+			canvas.width = canvas.width;
+
+			if (thingNames.length == 0) {
+				context.fillStyle = "#101010";
+				context.font = "40px sans-serif"
+				context.fillText("Waiting for something to happen...",
+								Math.floor(width / 10),
+								Math.floor(height / 4));
+				return
+			}
+
+			var LANE_MARGIN = 10;
+			var laneHeight = height / thingNames.length - LANE_MARGIN;
+
+			var laneSizeOverall = laneHeight + LANE_MARGIN;
+
+			for (var thingI = 0; thingI < thingNames.length; thingI++) {
+				var thingName = thingNames[thingI];
+				var thing = things[thingName];
+
+				thing.awfulNoise.setValue(thing.counter.getValue());
+
+				var laneOffset = thingI * laneSizeOverall;
+				var maxValue = thing.history.getMaxValue();
+				
+				var yScale = laneHeight / Math.max(maxValue, 1);
+				var xScale = width / historySize;
+
+
+				// Background
+				context.fillStyle = "#f0f0f0";
+				context.fillRect(0, thingI * laneSizeOverall, width, laneSizeOverall - LANE_MARGIN)
+
+				// Value tracker
+				context.fillStyle = "#e0e0e0";
+				context.fillRect(0, Math.floor(thing.counter.getValue()*yScale-2 + laneOffset), width, 4)
+
+				// Text
+				context.fillStyle = "#a0a0a0";
+				context.font = "" + (laneHeight/2) + "px sans-serif";
+				context.fillText(thingName + " " + Math.floor(thing.counter.getValue()*60) + " per minute",
+								LANE_MARGIN,
+								thingI * laneSizeOverall + (laneSizeOverall/2));
+
+
+				
+
+				context.beginPath();
+				var start = true;
+				thing.history.iterate(function(x, y) {
+					var backwardX = width - Math.floor(x * xScale);
+					if (!start) {
+						context.moveTo(backwardX,Math.floor(y * yScale) + laneOffset);
+						start = false;
+					} else {
+						context.lineTo(backwardX,Math.floor(y * yScale) + laneOffset);
+					}
+				});
+
+				context.stroke();
+
+
+			}
+		}
+		
+		function tick() {
+			// Shift the current value of each thing into its history.
+			for (var i = 0; i < thingNames.length; i++) {
+				things[thingNames[i]].history.shift(things[thingNames[i]].counter.getValue());
+			}
+
+			render();
 		}
 
-		window.setInterval(shift, 10);
-		window.setInterval(render, 100);
+		window.setInterval(tick, (1 / tickHz) * 1000);
+	}
 
-		var url = "wss://live.eventdata.crossref.org/socket";
-        
-        var socket = new WebSocket(url);
+	var canvas = document.getElementById("canvas");
+	var TICK_HZ = 20;
+	var COUNT_WINDOW_MSECS = 1000; // count per second
+	var HISTORY_SIZE = 4000;
+	var plotter = new MultipleRatePlotter(canvas, TICK_HZ, COUNT_WINDOW_MSECS,
+										  HISTORY_SIZE);
+	
 
-        socket.onopen = function() {
-          socket.send("items 20");
-          socket.send("start");
-        }
+	var url = "wss://live.eventdata.crossref.org/socket";
+    
+    var socket = new WebSocket(url);
 
-        socket.onmessage = function(item) {
-            var data = JSON.parse(item.data);
-            structure.ping(data.source_id);
-        };
+    socket.onopen = function() {
+      socket.send("items 20");
+      socket.send("start");
+    }
 
-        function resize() {
-        	structure.setDimensions(window.innerWidth, window.innerHeight);
-        }
-        resize();
-
-        window.addEventListener("resize", resize);
+    socket.onmessage = function(item) {
+        var data = JSON.parse(item.data);
+        plotter.ping(data.source_id);
+    };
+   
 	</script>
+
 	<style>
 	body, html { margin: 0px;} 
 	</style>
