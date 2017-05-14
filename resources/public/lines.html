@@ -8,17 +8,17 @@
   		var value = 0;
   		var velocity = 0;
 
-  		function tick() {
-  			// Otherwise, don't get into ridiculous asymptotic oscillation.
-  			// This also prevents zero-crossing.
-  			if (Math.abs(target - value) >= 1) {
-  				value += velocity;
-	  			velocity = (target - value) / DAMP;
-  			}
+  		function tick() {	
+			value += velocity;
+  			velocity = (target - value) / DAMP;
   		}
 
   		this.getValue = function() {
   			return value;
+  		}
+
+  		this.getTarget = function() {
+  			return target;
   		}
 
   		this.setTarget = function(newTarget) {
@@ -199,6 +199,9 @@
 		var countWindowMsecs = _countWindowMsecs;
 		var historySize = _historySize;
 
+		// Keep a max value for scaling. But smooth it out.
+		var maxValue = new VelocitySmoothedValue(tickHz);
+
 		// Keep keys into things so they can be added as we find out about them without disrupting the visual order.
 		var things = {};
 		var thingNames = [];
@@ -232,6 +235,7 @@
 	    	width = window.innerWidth;
 	    	height = window.innerHeight;
 	    	canvas.width = width;
+	    	canvas.height = height;
 	    }
 	    resize();
 	    window.addEventListener("resize", resize);
@@ -266,6 +270,16 @@
 
 			var laneSizeOverall = laneHeight + LANE_MARGIN;
 
+			// Find the current maximum of all things so we can scale all by that.
+			// Update smoothed value to converage on that so we don't get jerky re-scaling.
+			var thisMaxValue = 0;
+			for (var thingI = 0; thingI < thingNames.length; thingI++) {
+				var thingName = thingNames[thingI];
+				var thing = things[thingName];
+				thisMaxValue = Math.max(thisMaxValue, thing.history.getMaxValue());
+			}
+			maxValue.setTarget(thisMaxValue);
+
 			for (var thingI = 0; thingI < thingNames.length; thingI++) {
 				var thingName = thingNames[thingI];
 				var thing = things[thingName];
@@ -273,9 +287,8 @@
 				thing.awfulNoise.setValue(thing.counter.getValue());
 
 				var laneOffset = thingI * laneSizeOverall;
-				var maxValue = thing.history.getMaxValue();
-				
-				var yScale = laneHeight / Math.max(maxValue, 1);
+								
+				var yScale = laneHeight / Math.max(maxValue.getValue(), 1);
 				var xScale = width / historySize;
 
 
@@ -285,33 +298,31 @@
 
 				// Value tracker
 				context.fillStyle = "#e0e0e0";
-				context.fillRect(0, Math.floor(thing.counter.getValue()*yScale-2 + laneOffset), width, 4)
+				context.fillRect(0, Math.floor(laneHeight - (thing.counter.getValue()*yScale-2) + laneOffset), width, 4)
 
 				// Text
 				context.fillStyle = "#a0a0a0";
-				context.font = "" + (laneHeight/2) + "px sans-serif";
+				// Don't let text get so big it doesn't fit width-ways.
+				context.font = "" + Math.min(laneHeight/2, 100) + "px sans-serif";
 				context.fillText(thingName + " " + Math.floor(thing.counter.getValue()*60) + " per minute",
 								LANE_MARGIN,
 								thingI * laneSizeOverall + (laneSizeOverall/2));
 
 
-				
-
 				context.beginPath();
 				var start = true;
 				thing.history.iterate(function(x, y) {
 					var backwardX = width - Math.floor(x * xScale);
+					var upsideDownY = laneHeight - Math.floor(y * yScale);
 					if (!start) {
-						context.moveTo(backwardX,Math.floor(y * yScale) + laneOffset);
+						context.moveTo(backwardX,upsideDownY + laneOffset);
 						start = false;
 					} else {
-						context.lineTo(backwardX,Math.floor(y * yScale) + laneOffset);
+						context.lineTo(backwardX,upsideDownY + laneOffset);
 					}
 				});
 
 				context.stroke();
-
-
 			}
 		}
 		
