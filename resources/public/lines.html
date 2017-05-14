@@ -96,6 +96,10 @@
 
 		var values = new Float32Array(allocatedSize);		
 
+		this.getAllocatedSize = function() {
+			return allocatedSize;
+		}
+
 		this.getValue = function(logicalIndex) {
 			var offset = Math.floor(Math.log(logicalIndex) / Math.log(logBase));
 			var multipler = Math.pow(offset, logBase);
@@ -125,7 +129,7 @@
 				values[i-1] -= borrowedValue;
 
 				if (!isNaN(borrowedValue)) {
-					values[i] += borrowedValue;// * Math.pow(i, logBase);	
+					values[i] += borrowedValue;
 					maxValue = Math.max(values[i]||0, maxValue / Math.pow(i, logBase));
 				}
 
@@ -136,23 +140,22 @@
 
 		}
 
-		this.iterateLogical = function(callback) {
-			var k = 0;
-			for (var i = 0; i < allocatedSize; i++) {
-				var numRepresented = Math.pow(i, logBase);
-				for (var j=0; j < numRepresented; j++) {
-					callback(k, values[i] / numRepresented);
-					k++;
-				}
-			}
-		}
-
 		// Iterate in the logical value domain; don't interpolate x values.
-		this.iterate = function(callback) {
+		this.iterateLogical = function(callback) {
 			var x = 0;
 			for (var i = 0; i < allocatedSize; i++) {
 				var numRepresented = Math.pow(i, logBase);
 				callback(x, values[i] / numRepresented);
+				x += numRepresented;
+			}	
+		}
+
+		// Iterate in the logarithmic value domain; don't interpolate x values.
+		this.iterateLogarithmic = function(callback) {
+			var x = 0;
+			for (var i = 0; i < allocatedSize; i++) {
+				var numRepresented = Math.pow(i, logBase);
+				callback(i, values[i] / numRepresented);
 				x += numRepresented;
 			}	
 		}
@@ -288,9 +291,13 @@
 
 				var laneOffset = thingI * laneSizeOverall;
 								
-				var yScale = laneHeight / Math.max(maxValue.getValue(), 1);
-				var xScale = width / historySize;
+				// Main display is log scale in X dimension.
+				var xLogScale = width / thing.history.getAllocatedSize();
+				var yLogScale = laneHeight / Math.max(maxValue.getValue(), 1);
 
+				// Supplementary is linear and smaller.
+				var yScale = laneHeight / Math.max(maxValue.getValue(), 1) * 0.1;
+				var xScale = width / historySize;
 
 				// Background
 				context.fillStyle = "#f0f0f0";
@@ -298,7 +305,7 @@
 
 				// Value tracker
 				context.fillStyle = "#e0e0e0";
-				context.fillRect(0, Math.floor(laneHeight - (thing.counter.getValue()*yScale-2) + laneOffset), width, 4)
+				context.fillRect(0, Math.floor(laneHeight - (thing.counter.getValue()*yLogScale-2) + laneOffset), width, 4)
 
 				// Text
 				context.fillStyle = "#a0a0a0";
@@ -308,12 +315,14 @@
 								LANE_MARGIN,
 								thingI * laneSizeOverall + (laneSizeOverall/2));
 
-
+				// Draw linear-time small display.
+				context.strokeStyle = "#b0b0b0";
+				context.lineWidth = 1;
 				context.beginPath();
 				var start = true;
-				thing.history.iterate(function(x, y) {
+				thing.history.iterateLogical(function(x, y) {
 					var backwardX = width - Math.floor(x * xScale);
-					var upsideDownY = laneHeight - Math.floor(y * yScale);
+					var upsideDownY = (laneHeight * 0.1) - Math.floor(y * yScale);
 					if (!start) {
 						context.moveTo(backwardX,upsideDownY + laneOffset);
 						start = false;
@@ -321,8 +330,29 @@
 						context.lineTo(backwardX,upsideDownY + laneOffset);
 					}
 				});
-
 				context.stroke();
+
+				// Draw main logarithmic time display.
+				context.strokeStyle = "#303030";
+				context.lineWidth = 2;
+				context.beginPath();
+				var start = true;
+				thing.history.iterateLogarithmic(function(x, y) {
+					var backwardX = width - Math.floor(x * xLogScale);
+					var upsideDownY = laneHeight - Math.floor(y * yLogScale);
+					if (!start) {
+						context.moveTo(backwardX,upsideDownY + laneOffset);
+						start = false;
+					} else {
+						context.lineTo(backwardX,upsideDownY + laneOffset);
+					}
+				});
+				context.stroke();
+
+				
+
+
+
 			}
 		}
 		
