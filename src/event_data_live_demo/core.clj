@@ -1,7 +1,7 @@
 (ns event-data-live-demo.core
   (:require [clojure.data.json :as json]
-            [clojure.tools.logging :as log])
-  (:require [org.httpkit.server :as server]
+            [clojure.tools.logging :as log]
+            [org.httpkit.server :as server]
             [config.core :refer [env]]
             [compojure.core :refer [defroutes GET POST]]
             [ring.util.response :as ring-response]
@@ -10,9 +10,8 @@
             [liberator.core :refer [defresource]]
             [clj-time.core :as clj-time]
             [event-data-common.jwt :as jwt]
-            [event-data-common.storage.redis :as redis]
-            [event-data-common.storage.store :as store]
             [event-data-common.status :as status]
+            [event-data-common.queue :as queue]
             [overtone.at-at :as at-at]
             [clojure.core.async :as async]
             [ring.middleware.resource :as middleware-resource])
@@ -22,44 +21,31 @@
 
 ; Websocket things
 (def channel-hub (atom {}))
-(def pubsub-channel-name "__live_demo__broadcast")
 (def schedule-pool (at-at/mk-pool))
 
-(def redis-prefix "live_demo")
-(def default-redis-db-str "0")
-
-(def redis-store
-  "A redis connection for storing subscription and short-term information."
-  (delay 
-    (try
-      (redis/build redis-prefix (:redis-host env) (Integer/parseInt (:redis-port env)) (Integer/parseInt (get env :redis-db default-redis-db-str)))
-      (catch Exception e (log/error "Failed to create Redis connection" (.getMessage e))))))
+; About an hour's worth.
+(def num-recent-events 5000)
+(def recent-events (atom (list)))
+(defn shift-recent-events [event]
+  (swap! recent-events (fn [events] (doall (take num-recent-events (conj events event))))))
 
 (defn broadcast
   "Send event to all websocket listeners."
-  [data]
+  [event]
   ; Heartbeat is sent through pubsub. Don't rebroadcast it.
-  (when-not (= data "HEARTBEAT")
-    (try
-      (let [hub @channel-hub]
-      (log/info "Broadcast to " (count hub))
-        (doseq [[channel channel-options] hub]
-          (server/send! channel data)))
-      (catch Exception e (log/error "Error in broadcasting to websocket listeners " (.getMessage e))))))
+  (shift-recent-events event)
+  (try
+    (let [hub @channel-hub
+          data (json/write-str event)
+          num-listeners (count hub)]
 
-; "Accept POSTed Events"
-(defresource events
-  []
-  :allowed-methods [:post]
-  :available-media-types ["application/json"]
-  :authorized? (fn [ctx]
-                ; sub must be supplied to post.
-                (-> ctx :request :jwt-claims))
+    (when-not (zero? num-listeners)
+      (log/info "Broadcast to" num-listeners))
 
-    :post! (fn [ctx]
-      (let [body (-> ctx :request :body slurp)]
-        (status/send! "live-demo" "event" "received" 1)
-        (redis/publish-pubsub @redis-store pubsub-channel-name body))))
+      (doseq [[channel channel-options] hub]
+        (server/send! channel data)))
+
+    (catch Exception e (log/error "Error in broadcasting to websocket listeners" (.getMessage e)))))
 
 (defn socket-handler [request]
   (server/with-channel request channel
@@ -72,16 +58,23 @@
       (server/on-receive channel (fn [data]
                                    (swap! channel-hub assoc channel {}))))))
 
+(defresource events
+  "Get a few recent Events"
+  []
+  :allowed-methods [:get]
+  :available-media-types ["application/json"]
+  :handle-ok (fn [ctx]
+               @recent-events))
+
 (defroutes app-routes
   (GET "/socket" [] socket-handler)
-  (POST "/events" [] (events)))
+  (GET "/events" [] events))
 
 (def app
   ; Delay construction to runtime for secrets config value.
   (delay
     (-> app-routes
        middleware-params/wrap-params
-       (jwt/wrap-jwt (:jwt-secrets env))
        (middleware-resource/wrap-resource "public")
        (middleware-content-type/wrap-content-type))))
 
@@ -90,19 +83,17 @@
     (log/info "Start heartbeat")
     (at-at/every 10000 #(status/send! "live-demo" "heartbeat" "tick" 1) schedule-pool)
 
-    ; Send a heartbeat every second via pubsub. Log if there was an error sending it.
-    (at-at/every 1000 #(try
-                         (redis/publish-pubsub @redis-store pubsub-channel-name "HEARTBEAT")
-                         (catch Exception e (log/error "Error sending heartbeat via pubsub:" (.getMessage e))))
-                      schedule-pool)
-
     ; Listen on pubsub and send to all listening websockets.
     (async/thread
-      (log/info "Start redis pubsub listener in thread")
+      (log/info "Start Topic listener in thread")
       (try 
-        (redis/subscribe-pubsub @redis-store pubsub-channel-name #(broadcast %))
-        (catch Exception e (log/error "Error in redis pubsub listener " (.getMessage e))))
-      (log/error "Stopped listening to redis pubsub"))
+        (queue/process-topic {:username (:activemq-username env)
+                              :password (:activemq-password env)
+                              :topic-name (:activemq-topic env)
+                              :url (:activemq-url env)}
+                             broadcast)
+        (catch Exception e (log/error "Error in Topic listener " (.getMessage e))))
+      (log/error "Stopped listening to Topic"))
 
     (log/info "Start server on " port)
     (server/run-server @app {:port port})))

@@ -7,4 +7,4 @@ MAINTAINER Joe Wass jwass@crossref.org
 COPY . /usr/src/app
 WORKDIR /usr/src/app
 
-RUN lein deps && lein compile
+

@@ -12,4 +12,4 @@ pom.xml.asc
 .env
 *.env
 .m2-cache
-
+.DS_Store
