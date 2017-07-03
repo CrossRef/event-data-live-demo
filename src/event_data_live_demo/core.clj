@@ -11,12 +11,13 @@
             [clj-time.core :as clj-time]
             [event-data-common.jwt :as jwt]
             [event-data-common.status :as status]
-            [event-data-common.queue :as queue]
             [overtone.at-at :as at-at]
             [clojure.core.async :as async]
             [ring.middleware.resource :as middleware-resource])
   (:import
-           [java.net URL MalformedURLException InetAddress])
+           [java.net URL MalformedURLException InetAddress]
+           [org.apache.kafka.clients.consumer KafkaConsumer Consumer ConsumerRecords])
+
   (:gen-class))
 
 ; Websocket things
@@ -31,19 +32,18 @@
 
 (defn broadcast
   "Send event to all websocket listeners."
-  [event]
+  [event-json]
   ; Heartbeat is sent through pubsub. Don't rebroadcast it.
-  (shift-recent-events event)
+  (shift-recent-events event-json)
   (try
     (let [hub @channel-hub
-          data (json/write-str event)
           num-listeners (count hub)]
 
     (when-not (zero? num-listeners)
       (log/info "Broadcast to" num-listeners))
 
       (doseq [[channel channel-options] hub]
-        (server/send! channel data)))
+        (server/send! channel event-json)))
 
     (catch Exception e (log/error "Error in broadcasting to websocket listeners" (.getMessage e)))))
 
@@ -78,8 +78,35 @@
        (middleware-resource/wrap-resource "public")
        (middleware-content-type/wrap-content-type))))
 
+(defn ingest-kafka
+  [callback]
+  (let [properties (java.util.Properties.)]
+     (.put properties "bootstrap.servers" (:global-kafka-bootstrap-servers env))
+     
+     ; Give every process a separate group so it gets everything.
+     (.put properties "group.id"  (str "live-demo" (System/currentTimeMillis)))
+     (.put properties "key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer")
+     (.put properties "value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer")
+    
+     (.put properties "auto.offset.reset" "earliest")
+
+     (let [consumer (KafkaConsumer. properties)
+           topic-name (:global-bus-output-topic env)]
+       (log/info "Subscribing to" topic-name)
+       (.subscribe consumer (list topic-name))
+       (log/info "Subscribed to" topic-name "got" (count (or (.assignment consumer) [])) "assigned partitions")
+       (loop []
+         (log/info "Polling...")
+         (let [^ConsumerRecords records (.poll consumer (int 10000))]
+           (log/info "Got" (.count records) "records." (.hashCode records))
+           (doseq [^ConsumerRecords record records]
+            (Thread/sleep 1000)
+             ; Don't deserialize JSON, just send it out.
+             (callback (.value record))))
+          (recur)))))
+
 (defn run-server []
-  (let [port (Integer/parseInt (:port env))]
+  (let [port (Integer/parseInt (:live-port env))]
     (log/info "Start heartbeat")
     (at-at/every 10000 #(status/send! "live-demo" "heartbeat" "tick" 1) schedule-pool)
 
@@ -87,11 +114,7 @@
     (async/thread
       (log/info "Start Topic listener in thread")
       (try 
-        (queue/process-topic {:username (:activemq-username env)
-                              :password (:activemq-password env)
-                              :topic-name (:activemq-topic env)
-                              :url (:activemq-url env)}
-                             broadcast)
+        (ingest-kafka broadcast)
         (catch Exception e (log/error "Error in Topic listener " (.getMessage e))))
       (log/error "Stopped listening to Topic"))
 

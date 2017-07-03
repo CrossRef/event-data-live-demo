@@ -1,4 +1,4 @@
-(defproject event-live-demo "0.1.4"
+(defproject event-live-demo "0.1.6"
   :description "Event Data Live Demo"
   :url "http://eventdata.crossref.org/"
   :license {:name "MIT License"
@@ -7,7 +7,7 @@
                  [com.auth0/java-jwt "2.2.1"]
                  [compojure "1.5.1"]
                  [crossref-util "0.1.10"]
-                 [event-data-common "0.1.26"]
+                 [event-data-common "0.1.30"]
                  [http-kit "2.1.18"]
                  [http-kit.fake "0.2.1"]
                  [liberator "0.14.1"]
@@ -27,7 +27,8 @@
                  [ring/ring-mock "0.3.0"]
                  [ring/ring-servlet "1.5.0"]
                  [robert/bruce "0.8.0"]
-                 [yogthos/config "0.8"]]
+                 [yogthos/config "0.8"]
+                 [org.apache.kafka/kafka-clients "0.10.2.0"]]
   :main ^:skip-aot event-data-live-demo.core
   :target-path "target/%s"
   :test-selectors {:default (constantly true)

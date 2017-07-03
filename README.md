@@ -20,14 +20,8 @@ Note that this service can be run in Docker Swarm with replication. The Swarm ro
 
 | Environment variable  | Description                                            |
 |-----------------------|--------------------------------------------------------|
-| `STATUS_SERVICE`      | Public URL of the Status service                       |
-| `JWT_SECRETS`         | Comma-separated list of JTW Secrets                    |
-| `ARTIFACT_BASE`       | URL base of Artifact Repository                        |
-| `SOURCES_ARTIFACT`    | Name of the artifact that provides the list of sources |
-| `ACTIVEMQ_URL`        | Connection URL for ActiveMQ                            |
-| `ACTIVEMQ_USERNAME`   | Connection credentials for ActiveMQ                    |
-| `ACTIVEMQ_PASSWORD`   | Connection credentials for ActiveMQ                    |
-| `ACTIVEMQ_TOPIC`      | Topic name for ActiveMQ                                |
+| `GLOBAL_JWT_SECRETS`      | Comma-separated list of JTW Secrets                    |
+| `GLOBAL_BUS_OUTPUT_TOPIC` | Kafka topic to listen to. |
 
 ## License
 
