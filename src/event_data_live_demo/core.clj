@@ -100,7 +100,6 @@
          (let [^ConsumerRecords records (.poll consumer (int 10000))]
            (log/info "Got" (.count records) "records." (.hashCode records))
            (doseq [^ConsumerRecords record records]
-            (Thread/sleep 1000)
              ; Don't deserialize JSON, just send it out.
              (callback (.value record))))
           (recur)))))

@@ -14,10 +14,8 @@
     <link rel="stylesheet" href="/lib/bootstrap/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="/lib/bootstrap/dist/css/bootstrap-theme.min.css">
     <link rel="stylesheet" href="/lib/fontawesome/css/font-awesome.min.css">
-    <link rel="stylesheet" href="/lib/bootstrap-additions/dist/bootstrap-additions.min.css">
 
     <link rel="stylesheet" href="/navbar-fixed-top.css">
-    <link type="text/css" rel="stylesheet" href="http://ajax.googleapis.com/ajax/libs/jqueryui/1.8/themes/base/jquery-ui.css">
     <link rel="stylesheet" href="/main.css">
 
     <link rel="apple-touch-icon" sizes="57x57" href="https://assets.crossref.org/favicon/apple-touch-icon-57x57.png">
@@ -42,7 +40,6 @@
     <meta name="theme-color" content="#ffffff">
 
     <script src="/lib/jquery/dist/jquery.min.js"></script>
-    <script src="/lib/jquery-ui/jquery-ui.js"></script>
   </head>
   <body>
     <nav class="navbar navbar-default navbar-fixed-top" role="navigation">
@@ -212,7 +209,12 @@
                     
                     var source = window.location.hash.substring(1);
                     if (source == "") { source = "all"; }
-                    var url = "ws://" + window.location.host + "/socket";
+                    var url;
+                    if (window.location.protocol == "https:") {
+                        url = "wss://" + window.location.host + "/socket";
+                    } else {
+                        url = "ws://" + window.location.host + "/socket";
+                    }
                     var friendlySourceName = "all sources";
                     if (source != "all") {
                       url += "?source_id=" + source;
