@@ -11,9 +11,9 @@
 
   var url;
   if (window.location.protocol == "http:") {
-    url = "ws://" + window.location.host + "/events-socket";
+    url = "ws://" + window.location.host + "/status-socket";
   } else {
-    url = "wss://" + window.location.host + "/events-socket";
+    url = "wss://" + window.location.host + "/status-socket";
   }
 
   var socket = new WebSocket(url);
@@ -24,11 +24,13 @@
 
   socket.onmessage = function(item) {
       var data = JSON.parse(item.data);
-      plotter.ping(data.source_id, JSON.stringify(data, null, '    '));
+      var name = data.s + "." + data.c + "." + data.f;
+      plotter.ping(name, JSON.stringify(data, null, '    '));
   };
   </script>
 
   <style>
   body, html { margin: 0px;} 
   </style>
+  
 </html>

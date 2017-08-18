@@ -18,10 +18,10 @@ You can run a local copy with Docker Compose:
 
 Note that this service can be run in Docker Swarm with replication. The Swarm routing mesh might load-balance in-coming events, but they are all sent to the Redis instance for pubsub before being rebroadcast on websockets.
 
-| Environment variable  | Description                                            |
-|-----------------------|--------------------------------------------------------|
-| `GLOBAL_JWT_SECRETS`      | Comma-separated list of JTW Secrets                    |
-| `GLOBAL_BUS_OUTPUT_TOPIC` | Kafka topic to listen to. |
+ - GLOBAL_BUS_OUTPUT_TOPIC
+ - GLOBAL_STATUS_TOPIC
+ - GLOBAL_KAFKA_BOOTSTRAP_SERVERS
+ - LIVE_PORT
 
 ## License
 

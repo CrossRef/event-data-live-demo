@@ -1,4 +1,4 @@
-(defproject event-live-demo "0.1.7"
+(defproject event-live-demo "0.1.8"
   :description "Event Data Live Demo"
   :url "http://eventdata.crossref.org/"
   :license {:name "MIT License"
@@ -36,6 +36,7 @@
                    :component :component
                    :integration :integration
                    :all (constantly true)}
+  :jvm-opts ["-Duser.timezone=UTC"]
   :profiles {:uberjar {:aot :all}
              :prod {:resource-paths ["config/prod"]}
              :dev  {:resource-paths ["config/dev"]}})

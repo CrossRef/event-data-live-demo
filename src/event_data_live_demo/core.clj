@@ -21,7 +21,9 @@
   (:gen-class))
 
 ; Websocket things
-(def channel-hub (atom {}))
+(def event-channel-hub (atom {}))
+(def status-channel-hub (atom {}))
+
 (def schedule-pool (at-at/mk-pool))
 
 ; About an hour's worth.
@@ -32,11 +34,11 @@
 
 (defn broadcast
   "Send event to all websocket listeners."
-  [event-json]
+  [channel-hub-promise event-json]
   ; Heartbeat is sent through pubsub. Don't rebroadcast it.
   (shift-recent-events event-json)
   (try
-    (let [hub @channel-hub
+    (let [hub @channel-hub-promise
           num-listeners (count hub)]
 
     (when-not (zero? num-listeners)
@@ -47,16 +49,21 @@
 
     (catch Exception e (log/error "Error in broadcasting to websocket listeners" (.getMessage e)))))
 
-(defn socket-handler [request]
-  (server/with-channel request channel
-    (let [; source-filter is either the source id or nil for everything
-          source-filter (get-in request [:query-params "source_id"])]
-    
+(defn events-socket-handler [request]
+  (server/with-channel request channel   
+    (server/on-close channel (fn [status]
+                               (swap! event-channel-hub dissoc channel)))
+
+    (server/on-receive channel (fn [data]
+                                 (swap! event-channel-hub assoc channel {})))))
+
+(defn status-socket-handler [request]
+  (server/with-channel request channel    
       (server/on-close channel (fn [status]
-                                 (swap! channel-hub dissoc channel)))
+                                 (swap! status-channel-hub dissoc channel)))
 
       (server/on-receive channel (fn [data]
-                                   (swap! channel-hub assoc channel {}))))))
+                                   (swap! status-channel-hub assoc channel {})))))
 
 (defresource events
   "Get a few recent Events"
@@ -67,7 +74,8 @@
                @recent-events))
 
 (defroutes app-routes
-  (GET "/socket" [] socket-handler)
+  (GET "/events-socket" [] events-socket-handler)
+  (GET "/status-socket" [] status-socket-handler)
   (GET "/events" [] events))
 
 (def app
@@ -79,19 +87,14 @@
        (middleware-content-type/wrap-content-type))))
 
 (defn ingest-kafka
-  [callback]
-  (let [properties (java.util.Properties.)]
-     (.put properties "bootstrap.servers" (:global-kafka-bootstrap-servers env))
-     
-     ; Give every process a separate group so it gets everything.
-     (.put properties "group.id"  (str "live-demo" (System/currentTimeMillis)))
-     (.put properties "key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer")
-     (.put properties "value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer")
-    
-     (.put properties "auto.offset.reset" "earliest")
-
-     (let [consumer (KafkaConsumer. properties)
-           topic-name (:global-bus-output-topic env)]
+  [topic-name callback]
+  (let [consumer (KafkaConsumer. {
+         "bootstrap.servers" (:global-kafka-bootstrap-servers env)     
+         ; Give every process a separate group so it gets everything.
+         "group.id"  (str "live-demo-" topic-name "-" (System/currentTimeMillis))
+         "key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer"
+         "value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer"
+         "auto.offset.reset" "earliest"})]
        (log/info "Subscribing to" topic-name)
        (.subscribe consumer (list topic-name))
        (log/info "Subscribed to" topic-name "got" (count (or (.assignment consumer) [])) "assigned partitions")
@@ -102,7 +105,7 @@
            (doseq [^ConsumerRecords record records]
              ; Don't deserialize JSON, just send it out.
              (callback (.value record))))
-          (recur)))))
+          (recur))))
 
 (defn run-server []
   (let [port (Integer/parseInt (:live-port env))]
@@ -111,9 +114,16 @@
 
     ; Listen on pubsub and send to all listening websockets.
     (async/thread
-      (log/info "Start Topic listener in thread")
+      (log/info "Start Status listener in thread")
       (try 
-        (ingest-kafka broadcast)
+        (ingest-kafka (:global-status-topic env) (partial broadcast status-channel-hub))
+        (catch Exception e (log/error "Error in Topic listener " (.getMessage e))))
+      (log/error "Stopped listening to Topic"))
+
+    (async/thread
+      (log/info "Start Event listener in thread")
+      (try 
+        (ingest-kafka (:global-bus-output-topic env) (partial broadcast event-channel-hub))
         (catch Exception e (log/error "Error in Topic listener " (.getMessage e))))
       (log/error "Stopped listening to Topic"))
 
