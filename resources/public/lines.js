@@ -166,7 +166,7 @@ var AwfulNoise = function(_i, _bus, _audio) {
 
   // Frequency for note i plus modulation.
   function freqFor(i, modulation) {
-    return Math.pow(2, ((((i + 1) * 2 + Math.sqrt(modulation)))/12)) * 440;
+    return Math.pow(2, ((((i + 1) * 2 + Math.sqrt(modulation)))/12)) * 110;
   }
 
   var sourceGain = audio.createGain();
@@ -226,16 +226,27 @@ var MultipleRatePlotter = function(_canvas, _tickHz, _countWindowMsecs,
 
   // Graphics
   var context = canvas.getContext("2d");
+
+  // 2 on retina, 1 normal.
+  var ratio = window.devicePixelRatio;
+
+  context.scale(ratio,ratio);
+  canvas.style.width = width + "px";
+  canvas.style.height = height + "px";
+
   var width;
   var height;
-    function resize() {
-      width = window.innerWidth;
-      height = window.innerHeight;
-      canvas.width = width;
-      canvas.height = height;
-    }
-    resize();
-    window.addEventListener("resize", resize);
+
+  function resize() {
+    width = window.innerWidth;
+    height = window.innerHeight;
+    canvas.style.width = width + "px";
+    canvas.style.height = height + "px";
+    canvas.width = width * ratio;
+    canvas.height = height * ratio;
+  }
+  resize();
+  window.addEventListener("resize", resize);
 
   // Get or create named thing.
   function getThing(thingName) {
@@ -270,7 +281,7 @@ var MultipleRatePlotter = function(_canvas, _tickHz, _countWindowMsecs,
       return
     }
 
-    var LANE_MARGIN = 10;
+    var LANE_MARGIN = 5;
     var laneHeight = height / thingNames.length - LANE_MARGIN;
 
     var laneSizeOverall = laneHeight + LANE_MARGIN;
@@ -292,7 +303,7 @@ var MultipleRatePlotter = function(_canvas, _tickHz, _countWindowMsecs,
       thing.awfulNoise.setValue(thing.counter.getValue());
 
       var laneOffset = thingI * laneSizeOverall;
-              
+
       // Main display is log scale in X dimension.
       var xLogScale = width / thing.history.getAllocatedSize();
       var yLogScale = laneHeight / Math.max(maxValue.getValue(), 1);
@@ -303,30 +314,38 @@ var MultipleRatePlotter = function(_canvas, _tickHz, _countWindowMsecs,
 
       // Background
       context.fillStyle = "#f0f0f0";
-      context.fillRect(0, thingI * laneSizeOverall, width, laneSizeOverall - LANE_MARGIN)
+      context.fillRect(0 * ratio,
+                       thingI * laneSizeOverall * ratio,
+                       width * ratio,
+                       (laneSizeOverall - LANE_MARGIN) * ratio)
 
       // Value tracker
       context.fillStyle = "#e0e0e0";
-      context.fillRect(0, Math.floor(laneHeight - (thing.counter.getValue()*yLogScale-2) + laneOffset), width, 4)
+      context.fillRect(0 * ratio,
+                       (Math.floor(laneHeight - (thing.counter.getValue()*yLogScale-2) + laneOffset)) * ratio,
+                       width * ratio,
+                       4)
 
       // Text
       context.fillStyle = "#a0a0a0";
       // Don't let text get so big it doesn't fit width-ways.
-      context.font = "" + Math.min(laneHeight/2, 100) + "px sans-serif";
+      // Or too small neither.
+      context.font = "" + (Math.min(laneHeight/2, 100) * ratio) + "px sans-serif";
       context.fillText(thingName + " " + Math.floor(thing.counter.getValue()*60) + " per minute",
-              LANE_MARGIN,
-              thingI * laneSizeOverall + (laneSizeOverall/2));
+              LANE_MARGIN * ratio,
+              (thingI * laneSizeOverall + (laneSizeOverall/2)) * ratio);
 
       // Draw event.
       var EXPECTED_LINES = 30;
       var EXPECTED_CHARS = 70;
-      var textSize = Math.floor(laneSizeOverall / EXPECTED_LINES); // expect approx this many lines.
+      var textSize = Math.floor(laneSizeOverall / EXPECTED_LINES) * ratio; // expect approx this many lines.
       context.font = "" + textSize + "px sans-serif";
       for (var li=0; li < Math.min(thing.mostRecentData.length, EXPECTED_LINES); li++) {
-        context.fillText(thing.mostRecentData[li], width - (EXPECTED_CHARS * textSize), (thingI * laneSizeOverall) + (LANE_MARGIN * 2) + (li * textSize));
+        context.fillText(thing.mostRecentData[li],
+                         width - (EXPECTED_CHARS * textSize) * ratio,
+                         ((thingI * laneSizeOverall) + (LANE_MARGIN * 2) + (li * textSize)) * ratio);
       }
       
-
       // Draw linear-time small display.
       context.strokeStyle = "#b0b0b0";
       context.lineWidth = 1;
@@ -336,10 +355,10 @@ var MultipleRatePlotter = function(_canvas, _tickHz, _countWindowMsecs,
         var backwardX = width - Math.floor(x * xScale);
         var upsideDownY = (laneHeight * 0.1) - Math.floor(y * yScale);
         if (!start) {
-          context.moveTo(backwardX,upsideDownY + laneOffset);
+          context.moveTo(backwardX * ratio,(upsideDownY + laneOffset) * ratio);
           start = false;
         } else {
-          context.lineTo(backwardX,upsideDownY + laneOffset);
+          context.lineTo(backwardX * ratio,(upsideDownY + laneOffset) * ratio);
         }
       });
       context.stroke();
@@ -355,10 +374,12 @@ var MultipleRatePlotter = function(_canvas, _tickHz, _countWindowMsecs,
         var upsideDownY = laneHeight - Math.floor(y * yLogScale);
         
         if (!start) {
-          context.moveTo(backwardX,upsideDownY + laneOffset);
+          context.moveTo(backwardX * ratio,
+                         (upsideDownY + laneOffset) * ratio);
           start = false;
         } else {
-          context.lineTo(backwardX,upsideDownY + laneOffset);
+          context.lineTo(backwardX * ratio,
+                         (upsideDownY + laneOffset) * ratio);
         }
         
       });
