@@ -41,9 +41,6 @@
     (let [hub @channel-hub-promise
           num-listeners (count hub)]
 
-    (when-not (zero? num-listeners)
-      (log/info "Broadcast to" num-listeners))
-
       (doseq [[channel channel-options] hub]
         (server/send! channel event-json)))
 
@@ -99,9 +96,7 @@
        (.subscribe consumer (list topic-name))
        (log/info "Subscribed to" topic-name "got" (count (or (.assignment consumer) [])) "assigned partitions")
        (loop []
-         (log/info "Polling...")
          (let [^ConsumerRecords records (.poll consumer (int 10000))]
-           (log/info "Got" (.count records) "records." (.hashCode records))
            (doseq [^ConsumerRecords record records]
              ; Don't deserialize JSON, just send it out.
              (callback (.value record))))
