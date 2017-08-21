@@ -211,9 +211,9 @@
                     if (source == "") { source = "all"; }
                     var url;
                     if (window.location.protocol == "https:") {
-                        url = "wss://" + window.location.host + "/socket";
+                        url = "wss://" + window.location.host + "/events-socket";
                     } else {
-                        url = "ws://" + window.location.host + "/socket";
+                        url = "ws://" + window.location.host + "/events-socket";
                     }
                     var friendlySourceName = "all sources";
                     if (source != "all") {
