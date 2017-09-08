@@ -26,17 +26,10 @@
 
 (def schedule-pool (at-at/mk-pool))
 
-; About an hour's worth.
-(def num-recent-events 5000)
-(def recent-events (atom (list)))
-(defn shift-recent-events [event]
-  (swap! recent-events (fn [events] (doall (take num-recent-events (conj events event))))))
-
 (defn broadcast
   "Send event to all websocket listeners."
   [channel-hub-promise event-json]
   ; Heartbeat is sent through pubsub. Don't rebroadcast it.
-  (shift-recent-events event-json)
   (try
     (let [hub @channel-hub-promise
           num-listeners (count hub)]
@@ -62,18 +55,9 @@
       (server/on-receive channel (fn [data]
                                    (swap! status-channel-hub assoc channel {})))))
 
-(defresource events
-  "Get a few recent Events"
-  []
-  :allowed-methods [:get]
-  :available-media-types ["application/json"]
-  :handle-ok (fn [ctx]
-               @recent-events))
-
 (defroutes app-routes
   (GET "/events-socket" [] events-socket-handler)
-  (GET "/status-socket" [] status-socket-handler)
-  (GET "/events" [] events))
+  (GET "/status-socket" [] status-socket-handler))
 
 (def app
   ; Delay construction to runtime for secrets config value.
