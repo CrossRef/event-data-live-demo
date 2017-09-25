@@ -1,4 +1,4 @@
-(defproject event-live-demo "0.1.12"
+(defproject event-live-demo "0.1.13"
   :description "Event Data Live Demo"
   :url "http://eventdata.crossref.org/"
   :license {:name "MIT License"
