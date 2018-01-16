@@ -1,4 +1,4 @@
-(defproject event-live-demo "0.1.12"
+(defproject event-live-demo "0.1.13"
   :description "Event Data Live Demo"
   :url "http://eventdata.crossref.org/"
   :license {:name "MIT License"
@@ -7,7 +7,7 @@
                  [com.auth0/java-jwt "2.2.1"]
                  [compojure "1.5.1"]
                  [crossref-util "0.1.10"]
-                 [event-data-common "0.1.30"]
+                 [event-data-common "0.1.42"]
                  [http-kit "2.1.18"]
                  [http-kit.fake "0.2.1"]
                  [liberator "0.14.1"]

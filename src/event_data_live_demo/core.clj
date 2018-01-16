@@ -10,7 +10,6 @@
             [liberator.core :refer [defresource]]
             [clj-time.core :as clj-time]
             [event-data-common.jwt :as jwt]
-            [event-data-common.status :as status]
             [overtone.at-at :as at-at]
             [clojure.core.async :as async]
             [ring.middleware.resource :as middleware-resource])
@@ -26,6 +25,19 @@
 
 (def schedule-pool (at-at/mk-pool))
 
+(def latest-log-record-by-type
+  (atom {}))
+
+(def latest-log-record (atom nil))
+
+(defn store-latest-log-record
+  "Store the most recent log record of each type."
+  [log-record]
+  (let [; Key by service/component/facet/partition
+        k (juxt :s :c :f :p)]
+    (reset! latest-log-record log-record)
+    (swap! latest-log-record-by-type #(assoc % log-record))))
+
 (defn broadcast
   "Send event to all websocket listeners."
   [channel-hub-promise event-json]
@@ -38,6 +50,12 @@
         (server/send! channel event-json)))
 
     (catch Exception e (log/error "Error in broadcasting to websocket listeners" (.getMessage e)))))
+
+(defresource status-snapshot-handler
+  :available-media-types ["application/json"]
+  :handle-ok 
+  {:latest @latest-log-record
+   :latest-by-type @latest-log-record-by-type})
 
 (defn events-socket-handler [request]
   (server/with-channel request channel   
@@ -57,7 +75,8 @@
 
 (defroutes app-routes
   (GET "/events-socket" [] events-socket-handler)
-  (GET "/status-socket" [] status-socket-handler))
+  (GET "/status-socket" [] status-socket-handler)
+  (GET "/status-snapshot" [] status-snapshot-handler))
 
 (def app
   ; Delay construction to runtime for secrets config value.
@@ -88,14 +107,17 @@
 
 (defn run-server []
   (let [port (Integer/parseInt (:live-port env))]
-    (log/info "Start heartbeat")
-    (at-at/every 10000 #(status/send! "live-demo" "heartbeat" "tick" 1) schedule-pool)
 
     ; Listen on pubsub and send to all listening websockets.
     (async/thread
       (log/info "Start Status listener in thread")
       (try 
-        (ingest-kafka (:global-status-topic env) (partial broadcast status-channel-hub))
+        
+        (ingest-kafka
+          (:global-status-topic env)
+          (fn [log-record] (store-latest-log-record log-record)
+                           (broadcast status-channel-hub log-record)))
+
         (catch Exception e (log/error "Error in Topic listener " (.getMessage e))))
       (log/error "Stopped listening to Topic"))
 
