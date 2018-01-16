@@ -32,11 +32,12 @@
 
 (defn store-latest-log-record
   "Store the most recent log record of each type."
-  [log-record]
-  (let [; Key by service/component/facet/partition
-        k (juxt :s :c :f :p)]
-    (reset! latest-log-record log-record)
-    (swap! latest-log-record-by-type #(assoc % log-record))))
+  [log-record-json]
+  (let [parsed (json/read-str log-record-json :key-fn keyword)
+        ; Key by service/component/facet/partition
+        k ((juxt :s :c :f :p) parsed)]
+    (reset! latest-log-record parsed)
+    (swap! latest-log-record-by-type #(assoc % k parsed))))
 
 (defn broadcast
   "Send event to all websocket listeners."
