@@ -1,0 +1,289 @@
+<html>
+<link href="https://fonts.googleapis.com/css?family=Nova+Mono" rel="stylesheet">
+
+<style>
+body {
+  font-family: 'Nova Mono', monospace;
+}
+
+.cell {
+    height: 1.3em;
+    display: block;
+}
+
+div.round {
+  -moz-border-radius: 10px/10px;
+  -webkit-border-radius: 10px 10px;
+  border-radius: 10px/10px;
+  border:solid 1px #555;
+  display: inline-block;
+  opacity: 0;
+  text-align: center;
+  width: 2em;
+  position: relative;
+}
+
+div.roundContainer {
+  width: 3em;
+  display: inline-block;
+}
+
+div.round, span.caption {
+  margin-top: 1px;
+  margin-bottom: 1px;
+  padding: 1px;
+}
+
+.caption {
+  position: relative;
+}
+
+@-webkit-keyframes flash {
+    0% {
+      opacity:0;
+      transform: translate(0px, 0px);
+    }
+    1% {
+      opacity:1;
+      transform: translate(0px, -5px) scale(1.1);
+    }
+    2% {
+      opacity:1;
+      transform: translate(0px, 0px) scale(1); 
+    }
+    100% {
+      opacity:0;
+      transform: translate(0px, 0px);
+    }
+}
+
+table {
+  width: 100%;
+  font-size: 14px;
+}
+
+td {
+  vertical-align: top;
+}
+
+p.heading {
+  font-weight: bold;
+  margin: 5px;
+}
+
+.row {
+  background-color: #f0f0f0;
+  padding: 5px;
+  margin: 5px;
+
+}
+
+.col {
+  background-color: #e0e0e0;
+  margin-right: 5px;
+  padding: 5px;
+}
+
+
+</style>
+
+<body>
+
+<label><input type="checkbox" id="ssh" onclick="javascript:ssh()"> please be quiet</label>
+<table>
+  <tr id="events">
+  </tr>
+</table>
+</body>
+
+<script>
+
+
+  var lowerPitch = 100;
+  var upperPitch = 1500;
+  var pitchRange = upperPitch - lowerPitch;
+
+
+  function stringHashcode(entry) {
+    var str = entry.s + entry.c + entry.f;
+
+    var hash = 0, i, chr, len;
+    if (str.length === 0) return hash;
+    for (i = 0, len = str.length; i < len; i++) {
+      chr   = str.charCodeAt(i);
+      hash  = ((hash << 5) - hash) + (chr ^ 2);
+      // Truncate to 16 bits
+      hash &= 0xFFFFFF;
+    }
+    return hash;
+  }
+
+  var colourRangeLow = 150;
+  var colourRangeHigh = 250;
+  var colourRange = colourRangeHigh - colourRangeLow;
+  function clampColourRange(value) {
+    return Math.floor((value / 256) * colourRange + colourRangeLow);
+  }
+
+  var audioContext = new AudioContext();
+  // var oscillator = context.createOscillator();
+  // var gain = context.createGain();
+  // oscillator.type="sine";
+  // oscillator.connect(gain);
+  // gain.connect(context.destination);
+  // gain.gain.value = 0;
+  // oscillator.start(0);
+  
+  var beepQueue = [];
+  var quiet = false;
+  
+  var events = document.getElementById("events");
+  var headings = document.getElementById("headings");
+
+  function ssh() {
+    if (document.getElementById("ssh").checked) {
+      quiet = true;
+    } else {
+      quiet = false;
+    }
+
+    return false;
+  }
+
+  // Mapping of first element to <row>.
+  var cols = {};
+
+  function getCol(name) {
+    var col = cols[name];
+    
+    if (col) {
+      return cols[name];
+    }
+
+
+    var td = document.createElement("td");
+    var col = document.createElement("div");
+    col.innerHTML = "<p class='heading'>" + name + "</p>";
+    col.className="col";
+    cols[name] = col;
+    
+    events.appendChild(td);
+    td.appendChild(col);
+
+    return col;
+  }
+
+  function getCell(entry) {
+    var cellId = entry.s + entry.c + entry.f;
+
+    var cell = document.getElementById(cellId);
+    if (cell) {
+      return cell;
+    }
+
+    var col = getCol(entry.s);
+    var rowId = entry.s + "-" + entry.c;
+    var row = document.getElementById(rowId);
+
+    if (!row) {
+      row = document.createElement("div")
+      row.innerHTML = "<p class='heading'>" + entry.c + "</p>"
+      row.className = "row";
+      row.id = rowId;
+      col.appendChild(row);
+    }
+
+    cell = document.createElement("div");
+    cell.id = cellId;
+    cell.innerHTML = "<div class='roundContainer'><div class='round circle-flash'></div></div><span class='caption'>" + entry.f + "</span>"
+    cell.className = "cell"
+    row.appendChild(cell);
+
+    return cell;
+  }
+
+  function flashCircle(entry, count) {
+    var cell = getCell(entry);
+
+    var roundContainer = cell.getElementsByClassName('roundContainer')[0];
+    var round = roundContainer.getElementsByClassName('round')[0];
+    round.className = "round";
+    round.innerHTML = count;
+    round.style.animation = "";
+
+    window.setTimeout(function(){round.style.animation = "flash 20s ease-out 1"; roundContainer.appendChild(round);}, 10);
+    
+    var z = stringHashcode(entry);
+    var red = clampColourRange(z & 0x0000FF);
+    var green = clampColourRange((z & 0x00FF00) >> 8);
+    var blue = clampColourRange((z & 0xFF0000) >> 16);
+    round.style.backgroundColor = "rgb(" + red + ", " + green + ", " + blue + ")";
+  }
+
+  var audioChannels = 100;
+  for (var c = 0; c < audioChannels; c++) {
+    (function(cc) {
+      var oscillator = audioContext.createOscillator();
+      var gain = audioContext.createGain();
+      var panner = audioContext.createStereoPanner();
+
+      oscillator.type="triangle";
+      oscillator.connect(gain);
+      gain.connect(panner);
+      gain.gain.setValueAtTime(0, audioContext.currentTime);;
+      oscillator.start(0);
+
+      panner.pan.setValueAtTime(Math.random() * 2 - 1, audioContext.currentTime);
+      panner.connect(audioContext.destination);
+
+      function beep(entry, count) {
+        var pitch = ((stringHashcode(entry) / 0xFFFFFF) * pitchRange) + lowerPitch;
+        oscillator.frequency.setValueAtTime(pitch, audioContext.currentTime);
+        if (! quiet) {
+          gain.gain.setValueAtTime(1, audioContext.currentTime);
+        }
+        
+        gain.gain.linearRampToValueAtTime(1, audioContext.currentTime + 0.1);
+        gain.gain.linearRampToValueAtTime(0.0001, audioContext.currentTime + 0.2);
+      }
+
+      function serveQueue() {
+        var entry = beepQueue.shift();
+        if (entry != undefined) {
+          var entry = JSON.parse(entry);
+          beep(entry, 1);
+          flashCircle(entry, 1);
+        }
+      }
+
+      setInterval(serveQueue, 400 + Math.random() * 400)
+      
+    })(c);
+  }
+
+  var margin = 100;
+  var height = document.body.clientHeight - margin * 2;
+  var width = document.body.clientWidth - margin * 2;
+
+  var url = "wss://live.eventdata.crossref.org/status-socket"
+  if (window.location.protocol == "https:") {
+    url = "wss://" + window.location.host + "/status-socket";
+  } else {
+    url = "ws://" + window.location.host + "/status-socket";
+  }
+
+  var socket = new WebSocket(url);
+
+  socket.onopen = function() {
+    socket.send("start");
+  }
+
+  socket.onmessage = function(entry) {
+    beepQueue.push(entry.data);
+  };
+
+  socket.onerror = function() {
+    console.log("error");
+  }
+</script>
+</html>
