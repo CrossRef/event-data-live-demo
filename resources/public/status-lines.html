@@ -3,6 +3,7 @@
   <script src="lines.js"></script>
   <script>
   var canvas = document.getElementById("canvas");
+
   var TICK_HZ = 20;
   var COUNT_WINDOW_MSECS = 10000; // count per 10 seconds
   var HISTORY_SIZE = 4000;
@@ -15,6 +16,7 @@
   } else {
     url = "wss://" + window.location.host + "/status-socket";
   }
+  url = "ws://live.eventdata.crossref.org/status-socket";
 
   var socket = new WebSocket(url);
 
@@ -32,5 +34,5 @@
   <style>
   body, html { margin: 0px;} 
   </style>
-  
+
 </html>

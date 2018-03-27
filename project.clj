@@ -1,4 +1,4 @@
-(defproject event-live-demo "0.1.14"
+(defproject event-live-demo "0.1.15"
   :description "Event Data Live Demo"
   :url "http://eventdata.crossref.org/"
   :license {:name "MIT License"
@@ -6,16 +6,16 @@
   :dependencies [[clj-time "0.12.2"]
                  [com.auth0/java-jwt "2.2.1"]
                  [compojure "1.5.1"]
-                 [crossref-util "0.1.10"]
-                 [event-data-common "0.1.42"]
-                 [http-kit "2.1.18"]
+                 [crossref-util "0.1.14"]
+                 [event-data-common "0.1.43"]
+                 [http-kit "2.3.0-alpha5"]
                  [http-kit.fake "0.2.1"]
                  [liberator "0.14.1"]
                  [metosin/scjsv "0.4.0"]
                  [org.apache.httpcomponents/httpclient "4.5.2"]
                  [org.apache.logging.log4j/log4j-core "2.6.2"]
-                 [org.clojure/clojure "1.7.0"]
-                 [org.clojure/core.async "0.2.395"]
+                 [org.clojure/clojure "1.8.0"]
+                 [org.clojure/core.async "0.4.474"]
                  [org.clojure/data.json "0.2.6"]
                  [org.clojure/tools.logging "0.3.1"]
                  [org.eclipse.jetty/jetty-server "9.4.0.M0"]
