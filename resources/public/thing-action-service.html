@@ -100,7 +100,7 @@ p.heading {
 
 
   var lowerPitch = 100;
-  var upperPitch = 1500;
+  var upperPitch = 2000;
   var pitchRange = upperPitch - lowerPitch;
 
 
@@ -126,13 +126,6 @@ p.heading {
   }
 
   var audioContext = new AudioContext();
-  // var oscillator = context.createOscillator();
-  // var gain = context.createGain();
-  // oscillator.type="sine";
-  // oscillator.connect(gain);
-  // gain.connect(context.destination);
-  // gain.gain.value = 0;
-  // oscillator.start(0);
   
   var beepQueue = [];
   var quiet = false;
@@ -221,6 +214,7 @@ p.heading {
   }
 
   var audioChannels = 100;
+  var gainPerChannel = 1 / audioChannels;
   for (var c = 0; c < audioChannels; c++) {
     (function(cc) {
       var oscillator = audioContext.createOscillator();
@@ -240,11 +234,12 @@ p.heading {
         var pitch = ((stringHashcode(entry) / 0xFFFFFF) * pitchRange) + lowerPitch;
         oscillator.frequency.setValueAtTime(pitch, audioContext.currentTime);
         if (! quiet) {
-          gain.gain.setValueAtTime(1, audioContext.currentTime);
+          gain.gain.setValueAtTime(gainPerChannel, audioContext.currentTime);
         }
         
-        gain.gain.linearRampToValueAtTime(1, audioContext.currentTime + 0.1);
-        gain.gain.linearRampToValueAtTime(0.0001, audioContext.currentTime + 0.2);
+        gain.gain.linearRampToValueAtTime(gainPerChannel, audioContext.currentTime + 0.05);
+        gain.gain.linearRampToValueAtTime(gainPerChannel * 0.1, audioContext.currentTime + 0.2);
+        gain.gain.linearRampToValueAtTime(gainPerChannel * 0.001, audioContext.currentTime + 0.5);
       }
 
       function serveQueue() {
@@ -268,7 +263,7 @@ p.heading {
   var url = "wss://live.eventdata.crossref.org/status-socket"
   if (window.location.protocol == "https:") {
     url = "wss://" + window.location.host + "/status-socket";
-  } else {
+  } else if (window.location.protocol == "http:") {
     url = "ws://" + window.location.host + "/status-socket";
   }
 
