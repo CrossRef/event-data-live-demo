@@ -18,7 +18,7 @@ You can run a local copy with Docker Compose:
 
 Note that this service can be run in Docker Swarm with replication. The Swarm routing mesh might load-balance in-coming events, but they are all sent to the Redis instance for pubsub before being rebroadcast on websockets.
 
- - GLOBAL_BUS_OUTPUT_TOPIC
+ - LIVE_EVENTS_TOPIC - this can be the same as GLOBAL_BUS_OUTPUT_TOPIC, or you could use it to monitor another topic.
  - GLOBAL_STATUS_TOPIC
  - GLOBAL_KAFKA_BOOTSTRAP_SERVERS
  - LIVE_PORT

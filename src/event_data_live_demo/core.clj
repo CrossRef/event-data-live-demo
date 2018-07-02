@@ -125,7 +125,7 @@
     (async/thread
       (log/info "Start Event listener in thread")
       (try 
-        (ingest-kafka (:global-bus-output-topic env) (partial broadcast event-channel-hub))
+        (ingest-kafka (:live-events-topic env) (partial broadcast event-channel-hub))
         (catch Exception e (log/error "Error in Topic listener " (.getMessage e))))
       (log/error "Stopped listening to Topic"))
 
