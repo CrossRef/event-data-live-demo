@@ -10,13 +10,13 @@
   var plotter = new MultipleRatePlotter(canvas, TICK_HZ, COUNT_WINDOW_MSECS,
                       HISTORY_SIZE);
 
-  var url;
-  if (window.location.protocol == "http:") {
-    url = "ws://" + window.location.host + "/status-socket";
-  } else {
+  // Pick up whatever domain it's being served from, or a default for local development.
+  var url = "wss://agents-live.eventdata.crossref.org/status-socket"
+  if (window.location.protocol == "https:") {
     url = "wss://" + window.location.host + "/status-socket";
+  } else if (window.location.protocol == "http:") {
+    url = "ws://" + window.location.host + "/status-socket";
   }
-  url = "ws://live.eventdata.crossref.org/status-socket";
 
   var socket = new WebSocket(url);
 
